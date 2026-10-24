@@ -98,10 +98,10 @@ export const cancelScheduled = mutation({
 });
 
 export const unscheduleBot = internalAction({
-  args: { meetingId: v.id("meetings") },
-  handler: async (_ctx, { meetingId }) => {
+  args: { meetingId: v.id("meetings"), calendarEventId: v.optional(v.string()) },
+  handler: async (_ctx, { meetingId, calendarEventId }) => {
     try {
-      await callOrchestrator("/meetings/unschedule", { meetingId });
+      await callOrchestrator("/meetings/unschedule", { meetingId, calendarEventId });
     } catch {
       // The bot would still join, but the orchestrator ends cancelled meetings it sees. Nothing to retry here.
     }

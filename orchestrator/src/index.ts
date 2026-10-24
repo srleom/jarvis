@@ -147,11 +147,15 @@ app.post(
   internalOnly,
   route(async (body) => {
     const meetingId = str(body.meetingId, "meetingId");
-    const ctx = await convex.query(api.orchestrator.meetingContext, {
-      secret,
-      meetingId: meetingId as Id<"meetings">,
-    });
-    const eventId = ctx?.meeting.calendarEventId;
+    // The meeting row may already be deleted (agent deletion), so the caller can pass the event id.
+    let eventId = typeof body.calendarEventId === "string" ? body.calendarEventId : undefined;
+    if (!eventId) {
+      const ctx = await convex.query(api.orchestrator.meetingContext, {
+        secret,
+        meetingId: meetingId as Id<"meetings">,
+      });
+      eventId = ctx?.meeting.calendarEventId;
+    }
     if (eventId) await recall.client.removeCalendarEventBot(eventId);
     dropSession(meetingId);
   }),
