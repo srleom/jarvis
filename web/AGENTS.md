@@ -21,3 +21,7 @@ Convex agent skills for common tasks can be installed by running
 `npx convex ai-files install`.
 
 <!-- convex-ai-end -->
+
+## After making changes
+
+Run `pnpm fix` then `pnpm check` from the repo root and fix every remaining issue (see the root `CLAUDE.md`). Do not commit or push; the user does that themselves.
