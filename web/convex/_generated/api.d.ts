@@ -9,7 +9,6 @@
  */
 
 import type * as agents from "../agents.js";
-import type * as calendars from "../calendars.js";
 import type * as cleanup from "../cleanup.js";
 import type * as crons from "../crons.js";
 import type * as documents from "../documents.js";
@@ -21,6 +20,8 @@ import type * as notes from "../notes.js";
 import type * as notesData from "../notesData.js";
 import type * as orchestrator from "../orchestrator.js";
 import type * as seed from "../seed.js";
+import type * as state from "../state.js";
+import type * as stateProposals from "../stateProposals.js";
 import type * as team from "../team.js";
 import type * as webhooks from "../webhooks.js";
 
@@ -32,7 +33,6 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   agents: typeof agents;
-  calendars: typeof calendars;
   cleanup: typeof cleanup;
   crons: typeof crons;
   documents: typeof documents;
@@ -44,6 +44,8 @@ declare const fullApi: ApiFromModules<{
   notesData: typeof notesData;
   orchestrator: typeof orchestrator;
   seed: typeof seed;
+  state: typeof state;
+  stateProposals: typeof stateProposals;
   team: typeof team;
   webhooks: typeof webhooks;
 }>;

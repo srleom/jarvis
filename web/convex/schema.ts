@@ -1,6 +1,7 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 
+/** "topics" is legacy: boards from before topic cards used it. New notes use the other four. */
 export const boardColumn = v.union(
   v.literal("topics"),
   v.literal("decisions"),
@@ -9,14 +10,9 @@ export const boardColumn = v.union(
   v.literal("answers"),
 );
 
-export const meetingStatus = v.union(
-  v.literal("scheduled"),
-  v.literal("joining"),
-  v.literal("live"),
-  v.literal("ended"),
-  v.literal("failed"),
-  v.literal("cancelled"),
-);
+export const topicStatus = v.union(v.literal("upcoming"), v.literal("active"), v.literal("done"), v.literal("dropped"));
+
+export const meetingStatus = v.union(v.literal("joining"), v.literal("live"), v.literal("ended"), v.literal("failed"));
 
 export const avatarStateValue = v.union(
   v.literal("listening"),
@@ -35,6 +31,10 @@ export const relayStatus = v.union(
 );
 
 export const documentStatus = v.union(v.literal("indexing"), v.literal("ready"), v.literal("failed"));
+
+export const stateChangeKind = v.union(v.literal("add"), v.literal("update"), v.literal("remove"));
+
+export const proposalStatus = v.union(v.literal("pending"), v.literal("accepted"), v.literal("dismissed"));
 
 export const toolLogEntry = v.object({
   tool: v.string(),
@@ -84,34 +84,18 @@ export default defineSchema({
     meetUrl: v.string(),
     recallBotId: v.optional(v.string()),
     title: v.optional(v.string()),
+    /** What the meeting is for. Set by the lead, or inferred by the whiteboard loop from what the team says. */
+    goal: v.optional(v.string()),
     status: meetingStatus,
     error: v.optional(v.string()),
     mossDocIds: v.array(v.string()),
     startedAt: v.number(),
     endedAt: v.optional(v.number()),
-    /** "calendar" meetings are scheduled from a linked Calendar V2 event; the rest are pasted links. */
-    source: v.optional(v.union(v.literal("manual"), v.literal("calendar"))),
-    calendarEventId: v.optional(v.string()),
-    scheduledFor: v.optional(v.number()),
-    scheduledEnd: v.optional(v.number()),
   })
     .index("by_agent", ["agentId"])
     .index("by_agent_and_status", ["agentId", "status"])
     .index("by_status", ["status"])
-    .index("by_recallBotId", ["recallBotId"])
-    .index("by_calendarEventId", ["calendarEventId"]),
-
-  /** A Recall Calendar V2 calendar whose events are scheduled for one agent. */
-  calendarLinks: defineTable({
-    agentId: v.id("agents"),
-    recallCalendarId: v.string(),
-    platformEmail: v.optional(v.string()),
-    /** ISO timestamp of the newest event update we have processed. */
-    syncedThrough: v.optional(v.string()),
-    createdAt: v.number(),
-  })
-    .index("by_agent", ["agentId"])
-    .index("by_recallCalendarId", ["recallCalendarId"]),
+    .index("by_recallBotId", ["recallBotId"]),
 
   /** Recall webhook message ids already handled, so retries don't repeat side effects. */
   webhookEvents: defineTable({
@@ -129,8 +113,21 @@ export default defineSchema({
     isFinal: v.boolean(),
   }).index("by_meeting", ["meetingId"]),
 
+  /** Agenda items. Added, renamed, finished and dropped as the conversation moves. */
+  boardTopics: defineTable({
+    meetingId: v.id("meetings"),
+    title: v.string(),
+    status: topicStatus,
+    /** One line on where the topic landed, set when it is done. */
+    outcome: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_meeting", ["meetingId"]),
+
   boardNotes: defineTable({
     meetingId: v.id("meetings"),
+    /** Missing on notes from before topic cards. */
+    topicId: v.optional(v.id("boardTopics")),
     column: boardColumn,
     text: v.string(),
     owner: v.optional(v.string()),
@@ -169,6 +166,32 @@ export default defineSchema({
     state: avatarStateValue,
     preview: v.optional(v.string()),
   }).index("by_meeting", ["meetingId"]),
+
+  /** What the team has agreed so far. Newer than uploaded documents, so memory search ranks it first. */
+  stateFacts: defineTable({
+    agentId: v.id("agents"),
+    text: v.string(),
+    /** The meeting this fact came from, when it was accepted from a proposal. */
+    sourceMeetingId: v.optional(v.id("meetings")),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  }).index("by_agent", ["agentId"]),
+
+  /** Changes to the project state proposed after a meeting, waiting for review. */
+  stateProposals: defineTable({
+    agentId: v.id("agents"),
+    meetingId: v.id("meetings"),
+    kind: stateChangeKind,
+    /** The new fact for add and update; the reason for remove. */
+    text: v.string(),
+    factId: v.optional(v.id("stateFacts")),
+    /** The fact's text when the change was proposed, for update and remove. */
+    previousText: v.optional(v.string()),
+    status: proposalStatus,
+    createdAt: v.number(),
+  })
+    .index("by_agent_and_status", ["agentId", "status"])
+    .index("by_meeting", ["meetingId"]),
 
   meetingNotes: defineTable({
     meetingId: v.id("meetings"),

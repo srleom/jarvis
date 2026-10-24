@@ -18,6 +18,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
+import { MeetingStateUpdates } from "@/components/agent/project-state";
 import { EmptyState } from "@/components/agent/section";
 import { AppHeader } from "@/components/app-header";
 import { Board } from "@/components/board/board";
@@ -42,6 +43,7 @@ export function MeetingView({ agentId, meetingId }: { agentId: Id<"agents">; mee
   const transcript = useQuery(api.meetings.transcript, { meetingId });
   const now = useNow(15_000);
 
+  const setGoal = useMutation(api.meetings.setGoal);
   const [tab, setTab] = useState<string | null>(null);
 
   if (data === null) {
@@ -62,6 +64,15 @@ export function MeetingView({ agentId, meetingId }: { agentId: Id<"agents">; mee
   const meeting = data?.meeting;
   const inProgress = meeting?.status === "live" || meeting?.status === "joining";
   const activeTab = tab ?? (inProgress ? "whiteboard" : "notes");
+  const isFinished = meeting?.status === "ended" || meeting?.status === "failed";
+  const saveGoal = async (goal: string) => {
+    try {
+      await setGoal({ meetingId, goal });
+    } catch (err) {
+      toast.error(errorMessage(err));
+      throw err;
+    }
+  };
   const end = meeting ? (meeting.endedAt ?? (inProgress ? now : meeting.startedAt)) : 0;
 
   return (
@@ -88,25 +99,17 @@ export function MeetingView({ agentId, meetingId }: { agentId: Id<"agents">; mee
                   {meeting.title ??
                     (inProgress
                       ? "Meeting in progress"
-                      : meeting.status === "scheduled"
-                        ? "Scheduled meeting"
-                        : meeting.status === "cancelled"
-                          ? "Cancelled meeting"
-                          : meeting.status === "failed"
-                            ? "Couldn't join the call"
-                            : "Writing notes…")}
+                      : meeting.status === "failed"
+                        ? "Couldn't join the call"
+                        : "Writing notes…")}
                 </h1>
                 {meeting.status === "live" && <StatusBadge status="live" label="Live" />}
                 {meeting.status === "joining" && <StatusBadge status="joining" label="Waiting to be admitted" />}
-                {meeting.status === "scheduled" && <StatusBadge status="scheduled" />}
-                {meeting.status === "cancelled" && <StatusBadge status="cancelled" />}
                 {meeting.status === "failed" && <StatusBadge status="failed" />}
               </div>
               <p className="mt-1.5 text-sm text-muted-foreground">
                 {formatDate(meeting.startedAt)} · {formatTime(meeting.startedAt)} ·{" "}
-                {meeting.status === "scheduled" || meeting.status === "cancelled"
-                  ? "from calendar"
-                  : formatDuration(end - meeting.startedAt)}
+                {formatDuration(end - meeting.startedAt)}
                 <span className="mx-1.5">·</span>
                 <a
                   href={meeting.meetUrl}
@@ -131,7 +134,7 @@ export function MeetingView({ agentId, meetingId }: { agentId: Id<"agents">; mee
           <div className="-mx-4 overflow-x-auto border-b px-4 [scrollbar-width:none] sm:mx-0 sm:px-0">
             <TabsList variant="line" className="h-11 gap-4 p-0">
               <Trigger value="notes" label="Notes" />
-              <Trigger value="whiteboard" label="Whiteboard" count={board?.length} />
+              <Trigger value="whiteboard" label="Whiteboard" count={board?.notes.length} />
               <Trigger value="answers" label="Answers" count={answers?.length} />
               <Trigger value="relay" label="Relay log" count={relays?.length} />
               <Trigger value="transcript" label="Transcript" count={transcript?.length} />
@@ -141,13 +144,19 @@ export function MeetingView({ agentId, meetingId }: { agentId: Id<"agents">; mee
           <div className="pt-8">
             <TabsContent value="notes">
               <NotesPanel notes={data?.notes ?? null} inProgress={inProgress} loading={data === undefined} />
+              <MeetingStateUpdates meetingId={meetingId} />
             </TabsContent>
             <TabsContent value="whiteboard">
               {board === undefined ? (
                 <Skeleton className="h-80 rounded-2xl" />
               ) : (
                 <div className="overflow-x-auto rounded-2xl border bg-card p-3">
-                  <Board notes={board} />
+                  <Board
+                    topics={board.topics}
+                    notes={board.notes}
+                    goal={meeting?.goal}
+                    onSaveGoal={meeting && !isFinished ? saveGoal : undefined}
+                  />
                 </div>
               )}
               {inProgress && (
@@ -190,8 +199,7 @@ function MeetingActions({ meeting, agentId }: { meeting: Doc<"meetings">; agentI
   const router = useRouter();
   const leave = useMutation(api.meetings.leave);
   const [busy, setBusy] = useState(false);
-  const scheduled = meeting.status === "scheduled";
-  const inProgress = meeting.status === "live" || meeting.status === "joining" || scheduled;
+  const inProgress = meeting.status === "live" || meeting.status === "joining";
 
   return (
     <div className="flex items-center gap-2">
@@ -213,7 +221,7 @@ function MeetingActions({ meeting, agentId }: { meeting: Doc<"meetings">; agentI
             setBusy(true);
             try {
               await leave({ meetingId: meeting._id });
-              toast.success(scheduled ? "Meeting cancelled." : "Leaving the call. Notes will follow.");
+              toast.success("Leaving the call. Notes will follow.");
             } catch (e) {
               toast.error(errorMessage(e));
             } finally {
@@ -221,7 +229,7 @@ function MeetingActions({ meeting, agentId }: { meeting: Doc<"meetings">; agentI
             }
           }}
         >
-          <PhoneOff /> {scheduled ? "Cancel meeting" : "Remove from call"}
+          <PhoneOff /> Remove from call
         </Button>
       ) : (
         <DeleteMeetingDialog meetingId={meeting._id} onDeleted={() => router.push(`/agents/${agentId}`)}>

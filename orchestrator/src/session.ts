@@ -386,12 +386,23 @@ export class MeetingSession {
         meetingId: this.meetingId,
       });
       const ops = await proposeBoardOps(
-        board.map((n) => ({
-          id: n._id,
-          column: n.column,
-          text: n.text,
-          owner: n.owner,
-        })),
+        {
+          goal: board.goal,
+          title: board.title,
+          topics: board.topics.map((t) => ({
+            id: t._id,
+            title: t.title,
+            status: t.status,
+            outcome: t.outcome,
+          })),
+          notes: board.notes.map((n) => ({
+            id: n._id,
+            topicId: n.topicId,
+            column: n.column,
+            text: n.text,
+            owner: n.owner,
+          })),
+        },
         lines,
         this.name,
       );

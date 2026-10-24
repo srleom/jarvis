@@ -5,7 +5,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { env, mutation, query, type MutationCtx } from "./_generated/server";
 import { getActiveMeeting } from "./agents";
-import { avatarStateValue, boardColumn, relayStatus, toolLogEntry } from "./schema";
+import { avatarStateValue, relayStatus, toolLogEntry, topicStatus } from "./schema";
 
 function assertSecret(secret: string) {
   const expected = env.ORCHESTRATOR_SECRET;
@@ -82,19 +82,10 @@ export const setStatus = mutation({
     assertSecret(args.secret);
     const meeting = await ctx.db.get("meetings", args.meetingId);
     if (!meeting) return;
-    if (meeting.status === "ended" || meeting.status === "failed" || meeting.status === "cancelled") return;
-    if (args.status === "joining") {
-      // A calendar bot has started joining: the agent is now busy.
-      if (meeting.status === "scheduled") {
-        await ctx.db.patch("meetings", args.meetingId, {
-          status: "joining",
-          startedAt: Date.now(),
-        });
-      }
-      return;
-    }
+    if (meeting.status === "ended" || meeting.status === "failed") return;
+    if (args.status === "joining") return;
     if (args.status === "live") {
-      if (meeting.status === "joining" || meeting.status === "scheduled") {
+      if (meeting.status === "joining") {
         await ctx.db.patch("meetings", args.meetingId, {
           status: "live",
           startedAt: Date.now(),
@@ -157,20 +148,31 @@ export const board = query({
   args: { secret, meetingId: v.id("meetings") },
   handler: async (ctx, args) => {
     assertSecret(args.secret);
-    return await ctx.db
-      .query("boardNotes")
-      .withIndex("by_meeting", (q) => q.eq("meetingId", args.meetingId))
-      .take(500);
+    const meeting = await ctx.db.get("meetings", args.meetingId);
+    const [notes, topics] = await Promise.all([
+      ctx.db
+        .query("boardNotes")
+        .withIndex("by_meeting", (q) => q.eq("meetingId", args.meetingId))
+        .take(500),
+      ctx.db
+        .query("boardTopics")
+        .withIndex("by_meeting", (q) => q.eq("meetingId", args.meetingId))
+        .take(100),
+    ]);
+    return { notes, topics, goal: meeting?.goal ?? null, title: meeting?.title ?? null };
   },
 });
+
+const noteColumn = v.union(v.literal("decisions"), v.literal("questions"), v.literal("actions"));
 
 const boardOp = v.union(
   v.object({
     op: v.literal("add"),
-    column: boardColumn,
+    column: noteColumn,
     text: v.string(),
     owner: v.optional(v.string()),
-    sourceUrl: v.optional(v.string()),
+    /** Defaults to the active topic. */
+    topicId: v.optional(v.string()),
   }),
   v.object({
     op: v.literal("update"),
@@ -178,27 +180,108 @@ const boardOp = v.union(
     text: v.optional(v.string()),
     owner: v.optional(v.string()),
   }),
-  v.object({ op: v.literal("move"), id: v.string(), column: boardColumn }),
+  v.object({ op: v.literal("move"), id: v.string(), column: noteColumn }),
   v.object({ op: v.literal("remove"), id: v.string() }),
+  /** Creates a topic (no id) or changes one (id). Only one topic is active at a time. */
+  v.object({
+    op: v.literal("topic"),
+    id: v.optional(v.string()),
+    title: v.optional(v.string()),
+    status: topicStatus,
+    outcome: v.optional(v.string()),
+  }),
+  v.object({ op: v.literal("goal"), text: v.string() }),
 );
 
-/** Applies a whiteboard update in one transaction. Unknown or foreign note ids are ignored. */
+async function activeTopic(ctx: MutationCtx, meetingId: Id<"meetings">) {
+  const topics = await ctx.db
+    .query("boardTopics")
+    .withIndex("by_meeting", (q) => q.eq("meetingId", meetingId))
+    .take(100);
+  return topics.filter((t) => t.status === "active").at(-1) ?? null;
+}
+
+/** Applies a whiteboard update in one transaction. Unknown or foreign ids are ignored. */
 export const applyBoardOps = mutation({
   args: { secret, meetingId: v.id("meetings"), ops: v.array(boardOp) },
   handler: async (ctx, args) => {
     assertSecret(args.secret);
     const now = Date.now();
     let applied = 0;
-    for (const op of args.ops.slice(0, 5)) {
+
+    async function ownTopic(raw: string | undefined) {
+      const id = raw ? ctx.db.normalizeId("boardTopics", raw) : null;
+      const topic = id ? await ctx.db.get("boardTopics", id) : null;
+      return topic && topic.meetingId === args.meetingId ? topic : null;
+    }
+
+    for (const op of args.ops.slice(0, 6)) {
+      if (op.op === "goal") {
+        const text = op.text.trim();
+        if (!text) continue;
+        await ctx.db.patch("meetings", args.meetingId, { goal: text });
+        applied++;
+        continue;
+      }
+      if (op.op === "topic") {
+        const title = op.title?.trim();
+        const outcome = op.outcome?.trim();
+        const existing = await ownTopic(op.id);
+        if (op.id && !existing) continue;
+        if (!existing && !title) continue;
+        if (op.status === "active") {
+          // The conversation is on this topic now, so whatever was active is parked as done.
+          const topics = await ctx.db
+            .query("boardTopics")
+            .withIndex("by_meeting", (q) => q.eq("meetingId", args.meetingId))
+            .take(100);
+          for (const t of topics) {
+            if (t.status === "active" && t._id !== existing?._id) {
+              await ctx.db.patch("boardTopics", t._id, { status: "done", updatedAt: now });
+            }
+          }
+        }
+        if (!existing) {
+          await ctx.db.insert("boardTopics", {
+            meetingId: args.meetingId,
+            title: title!,
+            status: op.status,
+            outcome: outcome || undefined,
+            createdAt: now,
+            updatedAt: now,
+          });
+        } else if (op.status === "dropped") {
+          // Taken off the agenda. Keep it if it already holds notes, otherwise it never happened.
+          const held = await ctx.db
+            .query("boardNotes")
+            .withIndex("by_meeting", (q) => q.eq("meetingId", args.meetingId))
+            .take(500);
+          if (held.some((n) => n.topicId === existing._id)) {
+            await ctx.db.patch("boardTopics", existing._id, { status: "dropped", updatedAt: now });
+          } else {
+            await ctx.db.delete("boardTopics", existing._id);
+          }
+        } else {
+          await ctx.db.patch("boardTopics", existing._id, {
+            status: op.status,
+            ...(title ? { title } : {}),
+            ...(outcome ? { outcome } : {}),
+            updatedAt: now,
+          });
+        }
+        applied++;
+        continue;
+      }
       if (op.op === "add") {
         const text = op.text.trim();
         if (!text) continue;
+        const topic = (await ownTopic(op.topicId)) ?? (await activeTopic(ctx, args.meetingId));
         await ctx.db.insert("boardNotes", {
           meetingId: args.meetingId,
+          topicId: topic?._id,
           column: op.column,
           text,
           owner: op.owner?.trim() || undefined,
-          sourceUrl: op.sourceUrl,
           createdAt: now,
           updatedAt: now,
         });
@@ -253,8 +336,10 @@ export const addAnswer = mutation({
       createdAt: now,
     });
     if (args.boardNote.trim()) {
+      const topic = await activeTopic(ctx, args.meetingId);
       await ctx.db.insert("boardNotes", {
         meetingId: args.meetingId,
+        topicId: topic?._id,
         column: "answers",
         text: args.boardNote.trim(),
         sourceUrl: args.sourceUrl,
@@ -422,6 +507,10 @@ export const meetingDigest = query({
       .query("boardNotes")
       .withIndex("by_meeting", (q) => q.eq("meetingId", args.meetingId))
       .take(500);
+    const topics = await ctx.db
+      .query("boardTopics")
+      .withIndex("by_meeting", (q) => q.eq("meetingId", args.meetingId))
+      .take(100);
     const transcript = await ctx.db
       .query("transcriptSegments")
       .withIndex("by_meeting", (q) => q.eq("meetingId", args.meetingId))
@@ -431,11 +520,11 @@ export const meetingDigest = query({
       .query("meetingNotes")
       .withIndex("by_meeting", (q) => q.eq("meetingId", args.meetingId))
       .first();
-    return { meeting, board, transcript: transcript.reverse(), notes };
+    return { meeting, board, topics, transcript: transcript.reverse(), notes };
   },
 });
 
-// ------------------------------------------------------------------ webhooks and calendar scheduling
+// ------------------------------------------------------------------ webhooks
 
 /** True the first time a Recall webhook message id is seen. Retries of the same message get false. */
 export const claimWebhook = mutation({
@@ -452,137 +541,5 @@ export const claimWebhook = mutation({
       createdAt: Date.now(),
     });
     return true;
-  },
-});
-
-export const calendarLinks = query({
-  args: { secret },
-  handler: async (ctx, args) => {
-    assertSecret(args.secret);
-    return await ctx.db.query("calendarLinks").take(100);
-  },
-});
-
-export const calendarLinkByCalendarId = query({
-  args: { secret, recallCalendarId: v.string() },
-  handler: async (ctx, args) => {
-    assertSecret(args.secret);
-    return await ctx.db
-      .query("calendarLinks")
-      .withIndex("by_recallCalendarId", (q) => q.eq("recallCalendarId", args.recallCalendarId))
-      .first();
-  },
-});
-
-export const setCalendarSynced = mutation({
-  args: { secret, linkId: v.id("calendarLinks"), syncedThrough: v.string() },
-  handler: async (ctx, args) => {
-    assertSecret(args.secret);
-    await ctx.db.patch("calendarLinks", args.linkId, {
-      syncedThrough: args.syncedThrough,
-    });
-  },
-});
-
-/**
- * Records the intent to record a calendar event before Recall is asked to schedule the bot.
- * Idempotent per event: a re-sync updates the existing scheduled meeting instead of adding another.
- */
-export const scheduleCalendarMeeting = mutation({
-  args: {
-    secret,
-    agentId: v.id("agents"),
-    calendarEventId: v.string(),
-    meetUrl: v.string(),
-    title: v.optional(v.string()),
-    scheduledFor: v.number(),
-    scheduledEnd: v.number(),
-  },
-  handler: async (ctx, args) => {
-    assertSecret(args.secret);
-    const agent = await ctx.db.get("agents", args.agentId);
-    if (!agent) return { kind: "skipped" as const, reason: "agent_missing" };
-
-    const existing = await ctx.db
-      .query("meetings")
-      .withIndex("by_calendarEventId", (q) => q.eq("calendarEventId", args.calendarEventId))
-      .first();
-    if (existing) {
-      if (existing.status === "cancelled") return { kind: "skipped" as const, reason: "cancelled" };
-      if (existing.status !== "scheduled") return { kind: "skipped" as const, reason: "already_started" };
-      await ctx.db.patch("meetings", existing._id, {
-        meetUrl: args.meetUrl,
-        title: args.title,
-        startedAt: args.scheduledFor,
-        scheduledFor: args.scheduledFor,
-        scheduledEnd: args.scheduledEnd,
-      });
-      return { kind: "scheduled" as const, meetingId: existing._id };
-    }
-
-    // One agent can only be in one call at a time, so the first overlapping event wins.
-    const others = await ctx.db
-      .query("meetings")
-      .withIndex("by_agent_and_status", (q) => q.eq("agentId", args.agentId).eq("status", "scheduled"))
-      .take(100);
-    const clash = others.find(
-      (m) => (m.scheduledFor ?? 0) < args.scheduledEnd && (m.scheduledEnd ?? 0) > args.scheduledFor,
-    );
-    if (clash) return { kind: "skipped" as const, reason: "overlaps_another_meeting" };
-
-    const meetingId = await ctx.db.insert("meetings", {
-      agentId: args.agentId,
-      meetUrl: args.meetUrl,
-      title: args.title,
-      status: "scheduled",
-      source: "calendar",
-      calendarEventId: args.calendarEventId,
-      scheduledFor: args.scheduledFor,
-      scheduledEnd: args.scheduledEnd,
-      mossDocIds: [],
-      startedAt: args.scheduledFor,
-    });
-    await ctx.db.insert("avatarState", { meetingId, state: "listening" });
-    await ctx.db.patch("agents", agent._id, {
-      meetingCount: agent.meetingCount + 1,
-    });
-    return { kind: "scheduled" as const, meetingId };
-  },
-});
-
-/** Drops a scheduled meeting that never got a bot (Recall refused the request). */
-export const discardScheduled = mutation({
-  args: { secret, meetingId: v.id("meetings") },
-  handler: async (ctx, args) => {
-    assertSecret(args.secret);
-    const meeting = await ctx.db.get("meetings", args.meetingId);
-    if (!meeting || meeting.status !== "scheduled" || meeting.recallBotId) return;
-    await ctx.db.delete("meetings", meeting._id);
-    await ctx.scheduler.runAfter(0, internal.cleanup.meetingData, {
-      meetingId: meeting._id,
-    });
-    const agent = await ctx.db.get("agents", meeting.agentId);
-    if (agent)
-      await ctx.db.patch("agents", agent._id, {
-        meetingCount: Math.max(0, agent.meetingCount - 1),
-      });
-  },
-});
-
-/** The calendar event was deleted, or no longer qualifies: stop planning to join it. */
-export const cancelCalendarMeeting = mutation({
-  args: { secret, calendarEventId: v.string() },
-  handler: async (ctx, args) => {
-    assertSecret(args.secret);
-    const meeting = await ctx.db
-      .query("meetings")
-      .withIndex("by_calendarEventId", (q) => q.eq("calendarEventId", args.calendarEventId))
-      .first();
-    if (!meeting || meeting.status !== "scheduled") return null;
-    await ctx.db.patch("meetings", meeting._id, {
-      status: "cancelled",
-      endedAt: Date.now(),
-    });
-    return meeting._id;
   },
 });

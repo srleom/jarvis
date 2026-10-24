@@ -7,12 +7,11 @@ function reader(env: Env) {
 /** Builds the settings from an environment map, so tests can inject fake values. */
 export function buildConfig(env: Env) {
   const opt = reader(env);
-  const calendarOptIn: "all" | "tagged" = opt("CALENDAR_OPT_IN", "all") === "tagged" ? "tagged" : "all";
   return {
     port: Number(opt("PORT", "8787")),
     /** Shared with the Convex deployment's ORCHESTRATOR_SECRET (internal calls from Convex). */
     secret: opt("ORCHESTRATOR_SECRET"),
-    /** Stable public base URL of this server. Recall sends webhooks and the calendar callback here. */
+    /** Stable public base URL of this server. Recall sends webhooks here. */
     publicUrl: (opt("PUBLIC_API_BASE_URL") || opt("ORCHESTRATOR_PUBLIC_URL", "http://localhost:8787")).replace(
       /\/$/,
       "",
@@ -28,8 +27,6 @@ export function buildConfig(env: Env) {
       webhookSecret: opt("RECALL_WEBHOOK_VERIFICATION_SECRET"),
       /** "screenshare" (default) or "camera" if screenshare doesn't work in Meet. */
       outputMode: opt("RECALL_OUTPUT_MODE", "screenshare") as "screenshare" | "camera",
-      /** "all": every future Meet event on a linked calendar. "tagged": only events containing [jarvis]. */
-      calendarOptIn,
     },
     anthropicKey: opt("ANTHROPIC_API_KEY"),
     cartesia: {

@@ -8,7 +8,7 @@ export const forNotes = internalQuery({
     if (!meeting) return null;
     const agent = await ctx.db.get("agents", meeting.agentId);
     if (!agent) return null;
-    const [transcript, board, answers, relays, existing] = await Promise.all([
+    const [transcript, board, topics, answers, relays, existing] = await Promise.all([
       ctx.db
         .query("transcriptSegments")
         .withIndex("by_meeting", (q) => q.eq("meetingId", meetingId))
@@ -17,6 +17,10 @@ export const forNotes = internalQuery({
         .query("boardNotes")
         .withIndex("by_meeting", (q) => q.eq("meetingId", meetingId))
         .take(500),
+      ctx.db
+        .query("boardTopics")
+        .withIndex("by_meeting", (q) => q.eq("meetingId", meetingId))
+        .take(100),
       ctx.db
         .query("answers")
         .withIndex("by_meeting", (q) => q.eq("meetingId", meetingId))
@@ -35,6 +39,7 @@ export const forNotes = internalQuery({
       agent,
       transcript,
       board,
+      topics,
       answers,
       relays,
       hasNotes: existing !== null,

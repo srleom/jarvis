@@ -10,7 +10,7 @@ export type MemoryHit = {
   id: string;
   text: string;
   score: number;
-  source: "doc" | "transcript" | "notes";
+  source: "doc" | "transcript" | "notes" | "state";
   label: string;
   meetingId?: string;
 };
@@ -29,6 +29,7 @@ export const indexDocument = internalAction({
         fileName: info.doc.fileName,
         contentType: info.doc.contentType,
         url: info.url,
+        uploadedAt: info.doc.uploadedAt,
       });
       await ctx.runMutation(internal.documents.setIndexResult, {
         documentId,

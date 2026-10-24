@@ -25,7 +25,7 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: "search_memory",
     description:
-      "Search the team's memory: uploaded context documents (briefs, budgets), earlier parts of this call, and notes from past meetings. Use for anything about the team's own plans or decisions.",
+      "Search the team's memory: project state (the team's current agreed facts), uploaded context documents (briefs, budgets), earlier parts of this call, and notes from past meetings. Each result shows its source and date. Use for anything about the team's own plans or decisions.",
     input_schema: {
       type: "object",
       properties: {
@@ -69,6 +69,7 @@ How to answer:
 - Answer in one to three short sentences that sound natural when spoken. No lists, markdown or URLs in the spoken answer.
 - Use what was said in the call when it's relevant (for example a budget someone mentioned), and say so briefly ("you said 10k earlier").
 - Use tools only when you need them. Prefer search_memory for the team's own plans; use web_search for public facts. Read a page only if the snippets don't answer it.
+- Memory results carry dates. Project state is the team's latest agreed facts. If memory sources disagree, trust project state first, then the newer date, and mention the change briefly ("the brief says 50k, but you cut it to 40k on March 3").
 - Never guess facts. If the web search returned nothing or failed, say you couldn't confirm it online and answer from what you have.
 - When an answer comes from the web, set source_url to the page you relied on.
 

@@ -23,6 +23,18 @@ export const agentData = internalMutation({
       await ctx.db.delete("documents", d._id);
     }
 
+    const facts = await ctx.db
+      .query("stateFacts")
+      .withIndex("by_agent", (q) => q.eq("agentId", agentId))
+      .take(BATCH);
+    for (const f of facts) await ctx.db.delete("stateFacts", f._id);
+
+    const proposals = await ctx.db
+      .query("stateProposals")
+      .withIndex("by_agent_and_status", (q) => q.eq("agentId", agentId))
+      .take(BATCH);
+    for (const p of proposals) await ctx.db.delete("stateProposals", p._id);
+
     const meetings = await ctx.db
       .query("meetings")
       .withIndex("by_agent", (q) => q.eq("agentId", agentId))
@@ -34,7 +46,13 @@ export const agentData = internalMutation({
       });
     }
 
-    if (members.length === BATCH || docs.length === BATCH || meetings.length === 50) {
+    if (
+      members.length === BATCH ||
+      docs.length === BATCH ||
+      facts.length === BATCH ||
+      proposals.length === BATCH ||
+      meetings.length === 50
+    ) {
       await ctx.scheduler.runAfter(0, internal.cleanup.agentData, { agentId });
     }
   },
@@ -48,6 +66,7 @@ export const meetingData = internalMutation({
     const tables = [
       "transcriptSegments",
       "boardNotes",
+      "boardTopics",
       "answers",
       "relayRequests",
       "avatarState",

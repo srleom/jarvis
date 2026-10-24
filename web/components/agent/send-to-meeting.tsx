@@ -14,6 +14,7 @@ export function SendToMeeting({ agent }: { agent: AgentDetail }) {
   const send = useMutation(api.meetings.send);
   const leave = useMutation(api.meetings.leave);
   const [url, setUrl] = useState("");
+  const [goal, setGoal] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const active = agent.activeMeeting;
@@ -24,8 +25,9 @@ export function SendToMeeting({ agent }: { agent: AgentDetail }) {
     setBusy(true);
     setError(null);
     try {
-      await send({ agentId: agent._id, meetUrl: url });
+      await send({ agentId: agent._id, meetUrl: url, goal: goal.trim() || undefined });
       setUrl("");
+      setGoal("");
       toast.success(`${agent.name} is joining. Admit it from the Meet lobby.`);
     } catch (err) {
       setError(errorMessage(err));
@@ -74,7 +76,6 @@ export function SendToMeeting({ agent }: { agent: AgentDetail }) {
     <form onSubmit={submit} className="rounded-xl border bg-card p-3 shadow-[0_1px_2px_oklch(0.2_0.01_60/0.04)]">
       <label htmlFor="meet-url" className="mb-2 block px-1 text-xs font-medium text-muted-foreground">
         Send to a meeting now
-        <span className="ml-1.5 font-normal opacity-70">(manual · calendar meetings join on their own)</span>
       </label>
       <div className="flex gap-2">
         <div className="relative flex-1">
@@ -98,6 +99,15 @@ export function SendToMeeting({ agent }: { agent: AgentDetail }) {
           Send
         </Button>
       </div>
+      <input
+        value={goal}
+        onChange={(e) => setGoal(e.target.value)}
+        maxLength={200}
+        aria-label="Meeting goal (optional)"
+        placeholder="Goal (optional), like “pick a venue and set the budget”"
+        className="mt-2 h-9 w-full rounded-lg border border-input bg-background px-3 text-sm outline-none transition-shadow placeholder:text-muted-foreground/70 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/30"
+        autoComplete="off"
+      />
       {error && <p className="mt-2 px-1 text-xs text-destructive">{error}</p>}
     </form>
   );

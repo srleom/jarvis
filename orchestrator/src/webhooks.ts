@@ -13,7 +13,7 @@ export type WebhookDeps = {
   claim(messageId: string): Promise<boolean>;
   /** In-call data: transcript and chat. */
   onRealtime(evt: RecallEvent): Promise<void>;
-  /** Dashboard webhooks: bot lifecycle and Calendar V2. */
+  /** Dashboard webhooks: bot lifecycle. */
   onDashboard(evt: RecallEvent): Promise<void>;
   now?: () => number;
 };

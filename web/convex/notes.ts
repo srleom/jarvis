@@ -28,7 +28,7 @@ function toSlack(markdown: string) {
     .replace(/^(\s*)[-*]\s+/gm, "$1• ");
 }
 
-async function postToSlack(channel: string, text: string) {
+export async function postToSlack(channel: string, text: string, threadTs?: string) {
   const token = env.SLACK_BOT_TOKEN;
   if (!token || !channel) return undefined;
   const res = await fetch("https://slack.com/api/chat.postMessage", {
@@ -37,7 +37,7 @@ async function postToSlack(channel: string, text: string) {
       authorization: `Bearer ${token}`,
       "content-type": "application/json; charset=utf-8",
     },
-    body: JSON.stringify({ channel, text, unfurl_links: false, mrkdwn: true }),
+    body: JSON.stringify({ channel, text, unfurl_links: false, mrkdwn: true, thread_ts: threadTs }),
   });
   const data = (await res.json()) as {
     ok: boolean;
@@ -57,7 +57,7 @@ export const generate = internalAction({
   handler: async (ctx, { meetingId }) => {
     const data = await ctx.runQuery(internal.notesData.forNotes, { meetingId });
     if (!data || data.hasNotes) return;
-    const { meeting, agent, transcript, board, answers, relays } = data;
+    const { meeting, agent, transcript, board, topics, answers, relays } = data;
 
     const date = new Date(meeting.startedAt).toLocaleDateString("en-US", {
       weekday: "short",
@@ -68,6 +68,7 @@ export const generate = internalAction({
 
     let title = `Meeting on ${date}`;
     let markdown: string;
+    let written = false;
 
     if (transcript.length === 0) {
       markdown = "_Nothing was said while I was in the call, so there are no notes._";
@@ -75,9 +76,21 @@ export const generate = internalAction({
       markdown = "_Notes couldn't be generated: ANTHROPIC_API_KEY isn't set on the Convex deployment._";
     } else {
       const transcriptText = transcript.map((s) => `[${fmtTime(s.startTime)}] ${s.speaker}: ${s.text}`).join("\n");
-      const boardText = board
-        .map((n) => `- (${n.column}) ${n.text}${n.owner ? ` [owner: ${n.owner}]` : ""}`)
-        .join("\n");
+      const noteLine = (n: (typeof board)[number]) =>
+        `  - (${n.column}) ${n.text}${n.owner ? ` [owner: ${n.owner}]` : ""}`;
+      const boardParts = topics
+        .filter((t) => t.status !== "upcoming")
+        .map(
+          (t) =>
+            `Topic: ${t.title} [${t.status}]${t.outcome ? ` Outcome: ${t.outcome}` : ""}\n${board
+              .filter((n) => n.topicId === t._id)
+              .map(noteLine)
+              .join("\n")}`,
+        );
+      const loose = board.filter((n) => !n.topicId);
+      if (loose.length) boardParts.push(`Other notes\n${loose.map(noteLine).join("\n")}`);
+      const notReached = topics.filter((t) => t.status === "upcoming").map((t) => `- ${t.title}`);
+      const boardText = boardParts.join("\n");
       const answersText = answers
         .map(
           (a) =>
@@ -98,6 +111,7 @@ Always include, if there were any:
 - Decisions
 - Action items grouped by owner
 - Questions ${agent.name} answered, each with its source link
+- If a goal was stated, one line on whether the meeting got there. Mention agenda items that weren't reached.
 
 Rules:
 - Use Markdown with "## " section headings and "- " bullets. No tables.
@@ -108,9 +122,17 @@ Rules:
 ${transcriptText}
 </transcript>
 
+<meeting_goal>
+${meeting.goal ?? "(none stated)"}
+</meeting_goal>
+
 <final_whiteboard>
 ${boardText || "(empty)"}
 </final_whiteboard>
+
+<agenda_items_not_reached>
+${notReached.join("\n") || "(none)"}
+</agenda_items_not_reached>
 
 <questions_answered>
 ${answersText || "(none)"}
@@ -140,6 +162,7 @@ ${relayText || "(none)"}
       if (parsed) {
         title = parsed.title.trim() || title;
         markdown = parsed.markdown.trim();
+        written = true;
       } else {
         markdown = "_Notes couldn't be generated for this meeting._";
       }
@@ -175,5 +198,7 @@ ${relayText || "(none)"}
       slackMessageTs,
       mossDocIds,
     });
+
+    if (written) await ctx.scheduler.runAfter(0, internal.stateProposals.propose, { meetingId });
   },
 });

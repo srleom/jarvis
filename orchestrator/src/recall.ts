@@ -23,29 +23,6 @@ export class RecallError extends Error {
   }
 }
 
-export type CalendarEvent = {
-  id: string;
-  calendar_id: string;
-  start_time: string;
-  end_time: string;
-  meeting_url: string | null;
-  is_deleted: boolean;
-  updated_at: string;
-  raw?: {
-    summary?: string;
-    description?: string;
-    attendees?: { self?: boolean; responseStatus?: string }[];
-  } & Record<string, unknown>;
-  bots?: { bot_id: string; start_time?: string; meeting_url?: string }[];
-};
-
-export type RecallCalendar = {
-  id: string;
-  platform: string;
-  platform_email?: string | null;
-  status: string;
-};
-
 type Page<T> = { results: T[]; next: string | null };
 
 const RETRY_STATUSES = new Set([409, 429, 503, 507]);
@@ -113,18 +90,6 @@ export function createRecallClient(opts: RecallClientOptions) {
   }
 
   const v1 = (path: string) => `/api/v1${path}`;
-  const v2 = (path: string) => `/api/v2${path}`;
-
-  async function paged<T>(first: string): Promise<T[]> {
-    const out: T[] = [];
-    let next: string | null = first;
-    for (let pages = 0; next && pages < 50; pages++) {
-      const page: Page<T> = await request("GET", next);
-      out.push(...page.results);
-      next = page.next; // follow Recall's cursor URL unchanged
-    }
-    return out;
-  }
 
   return {
     request,
@@ -157,22 +122,6 @@ export function createRecallClient(opts: RecallClientOptions) {
       const last = bot.status_changes?.at(-1);
       return last ? { code: last.code, subCode: last.sub_code ?? null } : null;
     },
-
-    listCalendars: () => paged<RecallCalendar>(v2("/calendars/")),
-
-    listCalendarEvents(calendarId: string, updatedAtGte?: string) {
-      const q = new URLSearchParams({ calendar_id: calendarId });
-      if (updatedAtGte) q.set("updated_at__gte", updatedAtGte);
-      return paged<CalendarEvent>(v2(`/calendar-events/?${q}`));
-    },
-
-    scheduleCalendarEventBot: (eventId: string, deduplicationKey: string, botConfig: Record<string, unknown>) =>
-      request<CalendarEvent>("POST", v2(`/calendar-events/${eventId}/bot/`), {
-        deduplication_key: deduplicationKey,
-        bot_config: botConfig,
-      }),
-
-    removeCalendarEventBot: (eventId: string) => request("DELETE", v2(`/calendar-events/${eventId}/bot/`)),
   };
 }
 
@@ -182,7 +131,7 @@ export function joinMessage(name: string) {
   return `Hi, I'm ${name}. I'm transcribing this meeting and taking notes. Say 'Hey ${name}' to ask me something, or remove me from the call to stop.`;
 }
 
-/** Everything about the bot except its meeting URL and join time, shared by pasted links and calendar events. */
+/** Everything about the bot except its meeting URL. */
 export function buildBotConfig(
   c: Pick<Config, "publicUrl" | "botPageBaseUrl"> & {
     recall: Pick<Config["recall"], "outputMode">;

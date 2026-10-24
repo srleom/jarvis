@@ -67,21 +67,6 @@ test("retries reads after a network failure", async () => {
   assert.equal(calls.length, 2);
 });
 
-test("follows pagination cursors unchanged", async () => {
-  const next = "https://us-west-2.recall.ai/api/v2/calendar-events/?cursor=abc&calendar_id=c1";
-  const { client, calls } = harness([
-    fakeResponse(200, { results: [{ id: "e1" }], next }),
-    fakeResponse(200, { results: [{ id: "e2" }], next: null }),
-  ]);
-  const events = await client.listCalendarEvents("c1", "2026-01-01T00:00:00Z");
-  assert.deepEqual(
-    events.map((e) => e.id),
-    ["e1", "e2"],
-  );
-  assert.match(calls[0]!.url, /calendar_id=c1&updated_at__gte=2026-01-01T00%3A00%3A00Z/);
-  assert.equal(calls[1]!.url, next);
-});
-
 test("bot config carries the meeting id, Recall transcription and a slash-terminated signed webhook URL", () => {
   const cfg = buildBotConfig(
     {

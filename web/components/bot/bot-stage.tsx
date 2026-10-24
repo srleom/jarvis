@@ -19,7 +19,7 @@ const H = 720;
  */
 export function BotStage({ meetingId }: { meetingId: Id<"meetings"> }) {
   const data = useQuery(api.meetings.get, { meetingId });
-  const notes = useQuery(api.meetings.board, { meetingId });
+  const board = useQuery(api.meetings.board, { meetingId });
   const avatar = useQuery(api.meetings.avatar, { meetingId });
   const { level } = useVoice(meetingId);
   const scale = useFitScale();
@@ -45,7 +45,13 @@ export function BotStage({ meetingId }: { meetingId: Id<"meetings"> }) {
         </header>
 
         <div className="min-h-0 flex-1 overflow-hidden px-6 pt-5">
-          <Board notes={notes ?? []} variant="stage" className="h-full" />
+          <Board
+            topics={board?.topics ?? []}
+            notes={board?.notes ?? []}
+            goal={data?.meeting.goal}
+            variant="stage"
+            className="h-full"
+          />
         </div>
 
         <footer className="flex h-[132px] shrink-0 items-center gap-6 px-7">

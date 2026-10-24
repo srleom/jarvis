@@ -5,6 +5,7 @@ import { AlertCircle, FileText, Loader2, NotebookText, RotateCw, Search, Trash2,
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
+import { ProjectState } from "@/components/agent/project-state";
 import { EmptyState, SectionHeader } from "@/components/agent/section";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,6 +21,7 @@ const ACCEPT = ".pdf,.md,.markdown,.txt,application/pdf,text/markdown,text/plain
 export function MemoryTab({ agentId, agentName }: { agentId: Id<"agents">; agentName: string }) {
   return (
     <div className="space-y-12">
+      <ProjectState agentId={agentId} agentName={agentName} />
       <MemorySearch agentId={agentId} agentName={agentName} />
       <div className="grid gap-12 lg:grid-cols-2 lg:gap-8">
         <Documents agentId={agentId} />
@@ -108,6 +110,7 @@ function MemorySearch({ agentId, agentName }: { agentId: Id<"agents">; agentName
 function SourceChip({ source }: { source: MemoryHit["source"] }) {
   const map = {
     doc: { label: "Document", col: "topics" },
+    state: { label: "Project state", col: "answers" },
     transcript: { label: "Transcript", col: "actions" },
     notes: { label: "Notes", col: "decisions" },
   } as const;
@@ -171,7 +174,10 @@ function Documents({ agentId }: { agentId: Id<"agents"> }) {
 
   return (
     <section>
-      <SectionHeader title="Context documents" description="Briefs, budgets, sponsor lists. PDF, Markdown or text." />
+      <SectionHeader
+        title="Starting documents"
+        description="What the team knew at the start: briefs, budgets, sponsor lists. Project state overrides these. PDF, Markdown or text."
+      />
       <button
         type="button"
         onClick={() => input.current?.click()}

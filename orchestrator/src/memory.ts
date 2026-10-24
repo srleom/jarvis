@@ -14,7 +14,7 @@ export type MemoryHit = {
   id: string;
   text: string;
   score: number;
-  source: "doc" | "transcript" | "notes";
+  source: "doc" | "transcript" | "notes" | "state";
   label: string;
   meetingId?: string;
 };
@@ -67,29 +67,42 @@ export async function deleteIndex(indexName: string) {
   log.info(`deleted index ${indexName}`);
 }
 
+/** Project state is the newest word, so it outranks documents and notes that score about the same. */
+const STATE_BOOST = 0.15;
+
 export async function search(indexName: string, query: string, topK = 5): Promise<MemoryHit[]> {
   if (!(await indexExists(indexName))) return [];
   const started = Date.now();
-  const result = await moss().query(indexName, query, { topK });
+  // Ask for extra hits so a boosted state fact can move up into the top results.
+  const result = await moss().query(indexName, query, { topK: topK + 5 });
   log.info(`query "${query.slice(0, 60)}" → ${result.docs.length} hits in ${Date.now() - started}ms`);
-  return result.docs.map((d) => {
-    const m = d.metadata ?? {};
-    const source = (m.source as MemoryHit["source"]) ?? "doc";
-    const label =
-      source === "doc"
-        ? (m.fileName ?? "Document")
-        : source === "notes"
-          ? `Notes: ${m.title ?? "meeting"}${m.date ? ` (${m.date})` : ""}`
-          : `Transcript${m.speakers ? `: ${m.speakers}` : ""}${m.time ? ` · ${m.time}` : ""}`;
-    return {
-      id: d.id,
-      text: d.text,
-      score: d.score,
-      source,
-      label,
-      meetingId: m.meetingId,
-    };
-  });
+  return result.docs
+    .map((d) => {
+      const m = d.metadata ?? {};
+      const source = (m.source as MemoryHit["source"]) ?? "doc";
+      const label =
+        source === "doc"
+          ? `${m.fileName ?? "Document"}${m.date ? ` (uploaded ${m.date})` : ""}`
+          : source === "state"
+            ? `Project state${m.date ? ` (updated ${m.date})` : ""}`
+            : source === "notes"
+              ? `Notes: ${m.title ?? "meeting"}${m.date ? ` (${m.date})` : ""}`
+              : `Transcript${m.speakers ? `: ${m.speakers}` : ""}${m.time ? ` · ${m.time}` : ""}`;
+      return {
+        hit: {
+          id: d.id,
+          text: d.text,
+          score: d.score,
+          source,
+          label,
+          meetingId: m.meetingId,
+        },
+        rank: d.score + (source === "state" ? STATE_BOOST : 0),
+      };
+    })
+    .sort((a, b) => b.rank - a.rank)
+    .slice(0, topK)
+    .map((r) => r.hit);
 }
 
 /** Splits text into chunks of about `size` words. */
@@ -107,6 +120,7 @@ export async function indexDocument(opts: {
   fileName: string;
   contentType: string;
   url: string;
+  uploadedAt: number;
 }) {
   const res = await fetch(opts.url);
   if (!res.ok) throw new Error(`Couldn't download the file (${res.status}).`);
@@ -134,6 +148,7 @@ export async function indexDocument(opts: {
       source: "doc",
       fileName: opts.fileName,
       documentId: opts.documentId,
+      date: new Date(opts.uploadedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
     },
   }));
   await addDocs(opts.indexName, docs);

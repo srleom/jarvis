@@ -3,8 +3,6 @@ import type { NextFunction, Request, Response } from "express";
 import { WebSocketServer } from "ws";
 import { createApp } from "./app.js";
 import * as audio from "./audio.js";
-import { createCalendarSync } from "./calendar.js";
-import { convexCalendarStore } from "./calendar-store.js";
 import { config, missingConfig } from "./config.js";
 import { api, convex, secret, type Id } from "./convex.js";
 import { logger } from "./log.js";
@@ -14,12 +12,6 @@ import { allSessions, dropSession, loadSession, type MeetingSession } from "./se
 import { startSlack } from "./slack.js";
 
 const log = logger("server");
-
-const syncCalendar = createCalendarSync({
-  recall: recall.client,
-  store: convexCalendarStore,
-  config,
-});
 
 const app = createApp({
   health: () => ({
@@ -142,46 +134,6 @@ app.post(
   }),
 );
 
-app.post(
-  "/meetings/unschedule",
-  internalOnly,
-  route(async (body) => {
-    const meetingId = str(body.meetingId, "meetingId");
-    // The meeting row may already be deleted (agent deletion), so the caller can pass the event id.
-    let eventId = typeof body.calendarEventId === "string" ? body.calendarEventId : undefined;
-    if (!eventId) {
-      const ctx = await convex.query(api.orchestrator.meetingContext, {
-        secret,
-        meetingId: meetingId as Id<"meetings">,
-      });
-      eventId = ctx?.meeting.calendarEventId;
-    }
-    if (eventId) await recall.client.removeCalendarEventBot(eventId);
-    dropSession(meetingId);
-  }),
-);
-
-app.post(
-  "/calendar/list",
-  internalOnly,
-  route(async () => ({
-    calendars: (await recall.client.listCalendars()).map((c) => ({
-      id: c.id,
-      platform: c.platform,
-      platformEmail: c.platform_email ?? null,
-      status: c.status,
-    })),
-  })),
-);
-
-app.post(
-  "/calendar/sync",
-  internalOnly,
-  route(async (body) => ({
-    result: await syncCalendar(str(body.recallCalendarId, "recallCalendarId")),
-  })),
-);
-
 async function finish(session: MeetingSession, failed = false, error?: string) {
   dropSession(session.meetingId);
   await session.end(failed, error);
@@ -199,6 +151,7 @@ app.post(
       fileName: str(body.fileName, "fileName"),
       contentType: typeof body.contentType === "string" ? body.contentType : "",
       url: str(body.url, "url"),
+      uploadedAt: typeof body.uploadedAt === "number" ? body.uploadedAt : Date.now(),
     }),
   })),
 );
@@ -316,7 +269,6 @@ type DashboardEvent = {
   data?: {
     bot?: { id: string; metadata?: Record<string, string> };
     data?: { sub_code?: string | null };
-    calendar_id?: unknown;
   };
 };
 
@@ -327,11 +279,6 @@ async function handleDashboard(evt: DashboardEvent) {
     if (!session || session.ended) return;
     log.info(`status ${code} for ${session.meetingId}`);
     await applyStatus(session, code, evt.data?.data?.sub_code ?? null);
-  } else if (evt.event === "calendar.sync_events") {
-    const calendarId = evt.data?.calendar_id;
-    if (typeof calendarId === "string") await syncCalendar(calendarId);
-  } else if (evt.event === "calendar.update") {
-    log.warn("a calendar changed state (it may have disconnected); check it in Recall");
   }
 }
 
@@ -345,18 +292,6 @@ setInterval(() => {
       .catch((e) => log.warn(`status poll failed: ${(e as Error).message}`));
   }
 }, 10_000);
-
-// Calendar webhooks can be missed while the server is down, so every linked calendar is re-synced on a timer.
-async function reconcileCalendars() {
-  if (!config.secret || !config.recall.apiKey) return;
-  const links = await convex.query(api.orchestrator.calendarLinks, { secret });
-  for (const l of links)
-    await syncCalendar(l.recallCalendarId).catch((e) => log.warn(`calendar sync failed: ${(e as Error).message}`));
-}
-setInterval(
-  () => void reconcileCalendars().catch((e) => log.warn(`reconcile failed: ${(e as Error).message}`)),
-  10 * 60_000,
-);
 
 // ------------------------------------------------------------------ server + audio socket
 
@@ -391,6 +326,5 @@ server.listen(config.port, () => {
   const missing = missingConfig();
   if (missing.length) log.warn(`not configured: ${missing.join(", ")}`);
   void resumeActiveMeetings();
-  void reconcileCalendars().catch((e) => log.warn(`reconcile failed: ${(e as Error).message}`));
   void startSlack().catch((e) => log.error(`Slack failed to start: ${(e as Error).message}`));
 });

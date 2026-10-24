@@ -112,23 +112,6 @@ export const remove = mutation({
     if (active) {
       throw new ConvexError("Remove the agent from its meeting before deleting it.");
     }
-    // Calendar bots would otherwise still join, and the meeting rows are about to be deleted.
-    const scheduled = await ctx.db
-      .query("meetings")
-      .withIndex("by_agent_and_status", (q) => q.eq("agentId", agentId).eq("status", "scheduled"))
-      .take(200);
-    for (const m of scheduled) {
-      if (m.source !== "calendar") continue;
-      await ctx.scheduler.runAfter(0, internal.meetings.unscheduleBot, {
-        meetingId: m._id,
-        calendarEventId: m.calendarEventId,
-      });
-    }
-    const links = await ctx.db
-      .query("calendarLinks")
-      .withIndex("by_agent", (q) => q.eq("agentId", agentId))
-      .take(20);
-    for (const link of links) await ctx.db.delete("calendarLinks", link._id);
     await ctx.db.delete("agents", agentId);
     await ctx.scheduler.runAfter(0, internal.cleanup.agentData, { agentId });
     if (agent.mossIndexName) {

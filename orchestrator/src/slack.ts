@@ -66,7 +66,16 @@ async function meetingContext(meetingId: Id<"meetings">, transcriptLimit = 400) 
   });
   if (!d) return null;
   const live = d.meeting.status === "live" || d.meeting.status === "joining";
-  const board = d.board.map((n) => `- [${n.column}] ${n.text}${n.owner ? ` (owner: ${n.owner})` : ""}`).join("\n");
+  const noteLine = (n: (typeof d.board)[number]) =>
+    `  - [${n.column}] ${n.text}${n.owner ? ` (owner: ${n.owner})` : ""}`;
+  const topicLines = d.topics.map((t) =>
+    `- ${t.title} [${t.status}]${t.outcome ? `: ${t.outcome}` : ""}\n${d.board
+      .filter((n) => n.topicId === t._id)
+      .map(noteLine)
+      .join("\n")}`.trimEnd(),
+  );
+  const looseLines = d.board.filter((n) => !n.topicId).map(noteLine);
+  const board = [...topicLines, ...looseLines].join("\n");
   const transcript = d.transcript.map((s) => `[${clock(s.startTime)}] ${s.speaker}: ${s.text}`).join("\n");
   return {
     live,
@@ -74,7 +83,7 @@ async function meetingContext(meetingId: Id<"meetings">, transcriptLimit = 400) 
     startedAt: d.meeting.startedAt,
     text: `${live ? `This meeting is happening right now (started ${when(d.meeting.startedAt)}).` : `This meeting ended. Title: ${d.meeting.title ?? "untitled"}. It started ${when(d.meeting.startedAt)}.`}
 <whiteboard>
-${board || "(empty)"}
+${d.meeting.goal ? `Goal: ${d.meeting.goal}\n` : ""}${board || "(empty)"}
 </whiteboard>
 <transcript>
 ${transcript || "(nothing said yet)"}

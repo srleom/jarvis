@@ -1,5 +1,6 @@
 // Demo data for local development: `npx convex run seed:demo`
 import { v } from "convex/values";
+import type { Id } from "./_generated/dataModel";
 import { internalMutation } from "./_generated/server";
 import { DEFAULT_BEHAVIOUR_INSTRUCTIONS, DEFAULT_POST_MEETING_INSTRUCTIONS } from "./lib/constants";
 
@@ -71,25 +72,50 @@ export const demo = internalMutation({
       t += 40 + Math.round(Math.random() * 50);
     }
 
-    const notes: ["topics" | "decisions" | "questions" | "actions" | "answers", string, string?, string?][] = [
-      ["topics", "Spring hackathon venue"],
-      ["topics", "Setup schedule"],
-      ["topics", "Sponsor outreach"],
-      ["decisions", "Venue: Palace of Fine Arts"],
-      ["decisions", "Venue budget capped at $10k"],
-      ["questions", "Do we need overnight security?"],
-      ["actions", "Email venue to hold the date by Friday", "Sam"],
-      ["actions", "Draft the sponsor deck", "Priya"],
+    await ctx.db.patch("meetings", meetingId, {
+      goal: "Pick a venue and lock the budget for the spring hackathon",
+    });
+    const topicRows = [
+      { key: "venue", title: "Venue", status: "done" as const, outcome: "Palace of Fine Arts, $10k cap" },
+      { key: "setup", title: "Setup schedule", status: "done" as const, outcome: "Doors open Friday 6pm" },
+      { key: "sponsors", title: "Sponsor outreach", status: "done" as const, outcome: "Priya drafts the deck" },
+    ];
+    const topicIds: Record<string, Id<"boardTopics">> = {};
+    for (const t of topicRows) {
+      topicIds[t.key] = await ctx.db.insert("boardTopics", {
+        meetingId,
+        title: t.title,
+        status: t.status,
+        outcome: t.outcome,
+        createdAt: now,
+        updatedAt: now,
+      });
+    }
+
+    const notes: [
+      keyof typeof topicIds,
+      "decisions" | "questions" | "actions" | "answers",
+      string,
+      string?,
+      string?,
+    ][] = [
+      ["venue", "decisions", "Venue: Palace of Fine Arts"],
+      ["venue", "decisions", "Venue budget capped at $10k"],
+      ["setup", "questions", "Do we need overnight security?"],
+      ["venue", "actions", "Email venue to hold the date by Friday", "Sam"],
+      ["sponsors", "actions", "Draft the sponsor deck", "Priya"],
       [
+        "venue",
         "answers",
         "Palace of Fine Arts from ~$8,500/day, fits budget",
         undefined,
         "https://palaceoffinearts.com/rentals",
       ],
     ];
-    for (const [column, text, owner, sourceUrl] of notes) {
+    for (const [topic, column, text, owner, sourceUrl] of notes) {
       await ctx.db.insert("boardNotes", {
         meetingId,
+        topicId: topicIds[topic],
         column,
         text,
         owner,

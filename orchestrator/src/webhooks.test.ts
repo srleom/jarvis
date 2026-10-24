@@ -60,12 +60,12 @@ test("rejects unsigned and wrongly signed requests without running handlers", as
 
 test("accepts a signed dashboard webhook, acks 2xx and hands it to the handler", async () => {
   const res = await post("/recall/webhooks", {
-    event: "calendar.sync_events",
-    data: { calendar_id: "c1" },
+    event: "bot.done",
+    data: { bot: { id: "b1" } },
   });
   assert.equal(res.status, 200);
   await settle();
-  assert.deepEqual(dashboard, ["calendar.sync_events"]);
+  assert.deepEqual(dashboard, ["bot.done"]);
 });
 
 test("a retried message id is acknowledged but processed once", async () => {

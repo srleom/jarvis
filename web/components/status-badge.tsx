@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 
-type Status = "live" | "joining" | "scheduled" | "idle" | "ended" | "failed" | "cancelled";
+type Status = "live" | "joining" | "idle" | "ended" | "failed";
 
 const styles: Record<Status, { label: string; className: string; dot: string }> = {
   live: {
@@ -13,11 +13,6 @@ const styles: Record<Status, { label: string; className: string; dot: string }> 
     className: "bg-signal-soft text-signal",
     dot: "bg-signal live-dot",
   },
-  scheduled: {
-    label: "Scheduled",
-    className: "bg-muted text-foreground",
-    dot: "bg-signal",
-  },
   idle: {
     label: "Idle",
     className: "bg-muted text-muted-foreground",
@@ -25,11 +20,6 @@ const styles: Record<Status, { label: string; className: string; dot: string }> 
   },
   ended: {
     label: "Ended",
-    className: "bg-muted text-muted-foreground",
-    dot: "bg-muted-foreground/50",
-  },
-  cancelled: {
-    label: "Cancelled",
     className: "bg-muted text-muted-foreground",
     dot: "bg-muted-foreground/50",
   },

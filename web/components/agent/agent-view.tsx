@@ -29,6 +29,7 @@ type TabKey = (typeof TABS)[number]["key"];
 
 export function AgentView({ agentId }: { agentId: Id<"agents"> }) {
   const agent = useQuery(api.agents.get, { agentId });
+  const pendingChanges = useQuery(api.state.pendingCount, { agentId });
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const raw = searchParams.get("tab");
@@ -103,6 +104,11 @@ export function AgentView({ agentId }: { agentId: Id<"agents"> }) {
                 <TabsTrigger key={t.key} value={t.key} className="h-full flex-none px-0.5 text-[14px]">
                   <t.icon />
                   {t.label}
+                  {t.key === "memory" && !!pendingChanges && (
+                    <span className="rounded-full bg-primary px-1.5 py-0.5 text-[11px] leading-none font-medium text-primary-foreground">
+                      {pendingChanges}
+                    </span>
+                  )}
                 </TabsTrigger>
               ))}
             </TabsList>
