@@ -1,10 +1,12 @@
 "use client";
 
 import { useQuery } from "convex/react";
-import { CalendarDays, ChevronRight } from "lucide-react";
+import { CalendarDays, ChevronRight, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { EmptyState } from "@/components/agent/section";
+import { DeleteMeetingDialog } from "@/components/meeting/delete-meeting-dialog";
 import { StatusBadge } from "@/components/status-badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
@@ -40,10 +42,10 @@ export function MeetingsTab({ agentId }: { agentId: Id<"agents"> }) {
         const inProgress = m.status === "live" || m.status === "joining";
         const end = m.endedAt ?? (inProgress ? now : m.startedAt);
         return (
-          <li key={m._id}>
+          <li key={m._id} className="flex items-center transition-colors hover:bg-muted/50">
             <Link
               href={`/agents/${agentId}/meetings/${m._id}`}
-              className="group flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-muted/50 sm:px-5"
+              className="group flex min-w-0 flex-1 items-center gap-4 py-3.5 pl-4 sm:pl-5"
             >
               <div className="hidden w-14 shrink-0 flex-col items-center rounded-lg bg-muted/70 py-1.5 sm:flex">
                 <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
@@ -84,6 +86,20 @@ export function MeetingsTab({ agentId }: { agentId: Id<"agents"> }) {
               {m.status === "failed" && <StatusBadge status="failed" />}
               <ChevronRight className="size-4 shrink-0 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5" />
             </Link>
+            <div className="flex w-12 shrink-0 justify-center">
+              {(m.status === "ended" || m.status === "failed" || m.status === "cancelled") && (
+                <DeleteMeetingDialog meetingId={m._id}>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Delete meeting"
+                    className="text-muted-foreground hover:text-destructive"
+                  >
+                    <Trash2 />
+                  </Button>
+                </DeleteMeetingDialog>
+              )}
+            </div>
           </li>
         );
       })}

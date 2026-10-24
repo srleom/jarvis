@@ -21,19 +21,9 @@ import { toast } from "sonner";
 import { EmptyState } from "@/components/agent/section";
 import { AppHeader } from "@/components/app-header";
 import { Board } from "@/components/board/board";
+import { DeleteMeetingDialog } from "@/components/meeting/delete-meeting-dialog";
 import { Markdown } from "@/components/meeting/markdown";
 import { StatusBadge } from "@/components/status-badge";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -199,7 +189,6 @@ function Trigger({ value, label, count }: { value: string; label: string; count?
 function MeetingActions({ meeting, agentId }: { meeting: Doc<"meetings">; agentId: Id<"agents"> }) {
   const router = useRouter();
   const leave = useMutation(api.meetings.leave);
-  const remove = useMutation(api.meetings.remove);
   const [busy, setBusy] = useState(false);
   const scheduled = meeting.status === "scheduled";
   const inProgress = meeting.status === "live" || meeting.status === "joining" || scheduled;
@@ -235,39 +224,11 @@ function MeetingActions({ meeting, agentId }: { meeting: Doc<"meetings">; agentI
           <PhoneOff /> {scheduled ? "Cancel meeting" : "Remove from call"}
         </Button>
       ) : (
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button variant="outline" className="text-muted-foreground hover:text-destructive">
-              <Trash2 /> Delete
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Delete this meeting?</AlertDialogTitle>
-              <AlertDialogDescription>
-                The notes, whiteboard, answers, relay log and transcript are deleted, and the meeting is removed from
-                the agent&rsquo;s memory. Messages already posted to Slack stay there.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                className="bg-destructive text-white hover:bg-destructive/90"
-                onClick={async () => {
-                  try {
-                    await remove({ meetingId: meeting._id });
-                    toast.success("Meeting deleted");
-                    router.push(`/agents/${agentId}`);
-                  } catch (e) {
-                    toast.error(errorMessage(e));
-                  }
-                }}
-              >
-                Delete meeting
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <DeleteMeetingDialog meetingId={meeting._id} onDeleted={() => router.push(`/agents/${agentId}`)}>
+          <Button variant="outline" className="text-muted-foreground hover:text-destructive">
+            <Trash2 /> Delete
+          </Button>
+        </DeleteMeetingDialog>
       )}
     </div>
   );
