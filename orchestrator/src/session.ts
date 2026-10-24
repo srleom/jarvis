@@ -4,7 +4,7 @@ import { api, convex, secret, type Doc, type Id } from "./convex.js";
 import { logger } from "./log.js";
 import * as memory from "./memory.js";
 import { sendDM } from "./notify.js";
-import { answerQuestion } from "./qa.js";
+import { answerQuestion, type DraftDm } from "./qa.js";
 import * as recall from "./recall.js";
 import { synthesize } from "./tts.js";
 import { proposeBoardOps } from "./whiteboard.js";
@@ -14,6 +14,7 @@ const MOSS_INTERVAL_MS = 30_000;
 const QUESTION_WAIT_MS = 5_000;
 const RELAY_ANSWER_MAX_MS = 60_000;
 const RELAY_SILENCE_MS = 8_000;
+const DM_CONFIRM_MS = 45_000;
 const RECENT_WINDOW_S = 5 * 60;
 
 type Segment = { speaker: string; text: string; t: number; at: number };
@@ -40,6 +41,15 @@ function escapeRe(s: string) {
 
 function firstName(name: string) {
   return name.split(/\s+/)[0] ?? name;
+}
+
+/** Reads a short spoken or typed reply as yes, no, or neither. */
+function confirmation(text: string): "yes" | "no" | null {
+  const norm = normalize(text);
+  if (!norm || norm.split(" ").length > 6) return null;
+  if (/^(yes|yeah|yep|yup|sure|confirm|confirmed|correct|send it|do it|go for it)\b/.test(norm)) return "yes";
+  if (/^(no|nope|cancel|dont|don't|never mind|nevermind|stop|scrap that)\b/.test(norm)) return "no";
+  return null;
 }
 
 function clock(seconds: number) {
@@ -78,6 +88,9 @@ export class MeetingSession {
   private relayPhase: "idle" | "hand_raised" | "speaking" | "awaiting_answer" = "idle";
   private relayAnswer: Segment[] = [];
   private relayAnswerStarted = 0;
+
+  /** A Slack DM someone asked for out loud, held until they confirm it. */
+  private pendingDm: { draft: DraftDm; askedBy: string; timer: NodeJS.Timeout } | null = null;
 
   private timers: NodeJS.Timeout[] = [];
 
@@ -134,6 +147,7 @@ export class MeetingSession {
     this.ended = true;
     this.timers.forEach(clearInterval);
     if (this.awaitingQuestion) clearTimeout(this.awaitingQuestion.timer);
+    if (this.pendingDm) clearTimeout(this.pendingDm.timer);
     audio.stop(this.meetingId);
     for (const r of [this.relay, ...this.relayQueue]) {
       if (r) await sendDM(r.fromSlackUserId, this.prefix("The meeting ended before I could pass on your message."));
@@ -186,17 +200,16 @@ export class MeetingSession {
     return this.setAvatar("listening");
   }
 
-  /** Speaks through the bot page. Falls back to Meet chat if audio can't play. */
+  /** Speaks through the bot page and mirrors the text to Meet chat, since audio can be choppy on bad connections. */
   private async speak(text: string, { cacheable = false, record = true } = {}) {
     this.speaking = true;
     void this.setAvatar("speaking");
+    if (this.botId) void recall.sendChat(this.botId, text);
     try {
       const wav = await synthesize(text, { cacheable });
-      const played = await audio.play(this.meetingId, wav);
-      if (!played && this.botId) await recall.sendChat(this.botId, text);
+      await audio.play(this.meetingId, wav);
     } catch (e) {
-      this.log.warn(`speech failed, sending to chat: ${(e as Error).message}`);
-      if (this.botId) await recall.sendChat(this.botId, text);
+      this.log.warn(`speech failed: ${(e as Error).message}`);
     } finally {
       this.speaking = false;
       await this.restoreAvatar();
@@ -264,6 +277,11 @@ export class MeetingSession {
       })
       .catch((e) => this.log.warn(`transcript write failed: ${(e as Error).message}`));
 
+    if (this.pendingDm?.askedBy === speaker) {
+      const reply = confirmation(text);
+      if (reply) return void this.resolveDm(reply === "yes");
+    }
+
     if (this.relayPhase === "awaiting_answer") {
       this.relayAnswer.push(seg);
       return;
@@ -314,6 +332,10 @@ export class MeetingSession {
   onChat(sender: string, text: string) {
     if (this.ended) return;
     const t = text.trim().toLowerCase();
+    if (this.pendingDm?.askedBy === sender) {
+      const reply = confirmation(text);
+      if (reply) return void this.resolveDm(reply === "yes");
+    }
     if (this.relayPhase === "hand_raised") {
       if (t === "go") return void this.grantRelay();
       if (t === "not now") return void this.deferRelay();
@@ -342,22 +364,35 @@ export class MeetingSession {
         record: false,
       });
       await this.refreshAgent().catch(() => {});
+      const team = await convex
+        .query(api.orchestrator.teamForAgent, { secret, agentId: this.agent._id })
+        .catch((e: Error) => {
+          this.log.warn(`team lookup failed: ${e.message}`);
+          return [];
+        });
       const answer = await answerQuestion({
         agentName: this.name,
         behaviour: this.agent.behaviourInstructions,
         indexName: this.agent.mossIndexName,
+        team,
         question,
         askedBy,
         recentTranscript: this.recentTranscript(),
       });
       await filler;
-      await this.speak(answer.spoken_answer);
+      let spoken = answer.spoken_answer;
+      if (answer.draftDm) {
+        const draft = answer.draftDm;
+        spoken = `Send ${firstName(draft.name)} this on Slack: ${draft.message}. Say yes to send it, or no to cancel.`;
+        this.holdDm(draft, askedBy);
+      }
+      await this.speak(spoken);
       await convex.mutation(api.orchestrator.addAnswer, {
         secret,
         meetingId: this.meetingId,
         askedBy,
         question,
-        spokenAnswer: answer.spoken_answer,
+        spokenAnswer: spoken,
         boardNote: answer.board_note,
         sourceUrl: answer.source_url ?? undefined,
         toolLog: answer.toolLog,
@@ -368,6 +403,36 @@ export class MeetingSession {
       this.answering = false;
       await this.restoreAvatar();
     }
+  }
+
+  // ---------------------------------------------------------------- slack DMs
+
+  private holdDm(draft: DraftDm, askedBy: string) {
+    if (this.pendingDm) clearTimeout(this.pendingDm.timer);
+    const timer = setTimeout(() => {
+      if (this.pendingDm?.timer !== timer) return;
+      this.pendingDm = null;
+      this.log.info(`DM to ${draft.name} expired unconfirmed`);
+    }, DM_CONFIRM_MS);
+    this.pendingDm = { draft, askedBy, timer };
+  }
+
+  private async resolveDm(send: boolean) {
+    const pending = this.pendingDm;
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    this.pendingDm = null;
+    const { draft, askedBy } = pending;
+    if (!send) {
+      this.log.info(`DM to ${draft.name} cancelled`);
+      return void this.speak("Okay, I won't send it.");
+    }
+    this.log.info(`DM to ${draft.name} confirmed by ${askedBy}`);
+    await sendDM(
+      draft.slackUserId,
+      this.prefix(`${askedBy} asked me to pass this on from the meeting: ${draft.message}`),
+    );
+    await this.speak(`Sent to ${firstName(draft.name)}.`);
   }
 
   // ---------------------------------------------------------------- whiteboard

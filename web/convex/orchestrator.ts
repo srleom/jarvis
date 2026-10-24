@@ -34,6 +34,19 @@ export const agentName = query({
   },
 });
 
+/** The people on an agent's Team tab, so Jarvis can resolve a spoken name to a Slack user. */
+export const teamForAgent = query({
+  args: { secret, agentId: v.id("agents") },
+  handler: async (ctx, args) => {
+    assertSecret(args.secret);
+    const members = await ctx.db
+      .query("teamMembers")
+      .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+      .take(100);
+    return members.map((m) => ({ name: m.name, slackUserId: m.slackUserId }));
+  },
+});
+
 export const meetingByBotId = query({
   args: { secret, recallBotId: v.string() },
   handler: async (ctx, args) => {
