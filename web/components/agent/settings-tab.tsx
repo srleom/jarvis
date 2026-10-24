@@ -16,6 +16,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { CalendarCard } from "@/components/agent/calendar-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -89,6 +90,8 @@ export function SettingsTab({ agent }: { agent: AgentDetail }) {
           </Button>
         </div>
       </form>
+
+      <CalendarCard agentId={agent._id} agentName={agent.name} />
 
       <div className="rounded-xl border border-destructive/25 bg-card p-5">
         <h2 className="text-base font-semibold tracking-tight">Delete agent</h2>

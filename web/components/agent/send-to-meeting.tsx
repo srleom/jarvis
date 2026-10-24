@@ -76,7 +76,8 @@ export function SendToMeeting({ agent }: { agent: AgentDetail }) {
       className="rounded-xl border bg-card p-3 shadow-[0_1px_2px_oklch(0.2_0.01_60/0.04)]"
     >
       <label htmlFor="meet-url" className="mb-2 block px-1 text-xs font-medium text-muted-foreground">
-        Send to a meeting
+        Send to a meeting now
+        <span className="ml-1.5 font-normal opacity-70">(manual · calendar meetings join on their own)</span>
       </label>
       <div className="flex gap-2">
         <div className="relative flex-1">

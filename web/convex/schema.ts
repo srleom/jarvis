@@ -10,10 +10,12 @@ export const boardColumn = v.union(
 );
 
 export const meetingStatus = v.union(
+  v.literal("scheduled"),
   v.literal("joining"),
   v.literal("live"),
   v.literal("ended"),
   v.literal("failed"),
+  v.literal("cancelled"),
 );
 
 export const avatarStateValue = v.union(
@@ -89,11 +91,37 @@ export default defineSchema({
     mossDocIds: v.array(v.string()),
     startedAt: v.number(),
     endedAt: v.optional(v.number()),
+    /** "calendar" meetings are scheduled from a linked Calendar V2 event; the rest are pasted links. */
+    source: v.optional(v.union(v.literal("manual"), v.literal("calendar"))),
+    calendarEventId: v.optional(v.string()),
+    scheduledFor: v.optional(v.number()),
+    scheduledEnd: v.optional(v.number()),
   })
     .index("by_agent", ["agentId"])
     .index("by_agent_and_status", ["agentId", "status"])
     .index("by_status", ["status"])
-    .index("by_recallBotId", ["recallBotId"]),
+    .index("by_recallBotId", ["recallBotId"])
+    .index("by_calendarEventId", ["calendarEventId"]),
+
+  /** A Recall Calendar V2 calendar whose events are scheduled for one agent. */
+  calendarLinks: defineTable({
+    agentId: v.id("agents"),
+    recallCalendarId: v.string(),
+    platformEmail: v.optional(v.string()),
+    /** ISO timestamp of the newest event update we have processed. */
+    syncedThrough: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_agent", ["agentId"])
+    .index("by_recallCalendarId", ["recallCalendarId"]),
+
+  /** Recall webhook message ids already handled, so retries don't repeat side effects. */
+  webhookEvents: defineTable({
+    eventId: v.string(),
+    createdAt: v.number(),
+  })
+    .index("by_eventId", ["eventId"])
+    .index("by_createdAt", ["createdAt"]),
 
   transcriptSegments: defineTable({
     meetingId: v.id("meetings"),

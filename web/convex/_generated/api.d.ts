@@ -9,7 +9,9 @@
  */
 
 import type * as agents from "../agents.js";
+import type * as calendars from "../calendars.js";
 import type * as cleanup from "../cleanup.js";
+import type * as crons from "../crons.js";
 import type * as documents from "../documents.js";
 import type * as lib_constants from "../lib/constants.js";
 import type * as lib_orchestrator from "../lib/orchestrator.js";
@@ -20,6 +22,7 @@ import type * as notesData from "../notesData.js";
 import type * as orchestrator from "../orchestrator.js";
 import type * as seed from "../seed.js";
 import type * as team from "../team.js";
+import type * as webhooks from "../webhooks.js";
 
 import type {
   ApiFromModules,
@@ -29,7 +32,9 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   agents: typeof agents;
+  calendars: typeof calendars;
   cleanup: typeof cleanup;
+  crons: typeof crons;
   documents: typeof documents;
   "lib/constants": typeof lib_constants;
   "lib/orchestrator": typeof lib_orchestrator;
@@ -40,6 +45,7 @@ declare const fullApi: ApiFromModules<{
   orchestrator: typeof orchestrator;
   seed: typeof seed;
   team: typeof team;
+  webhooks: typeof webhooks;
 }>;
 
 /**

@@ -1,7 +1,10 @@
 import { createServer } from "node:http";
-import express, { type NextFunction, type Request, type Response } from "express";
+import type { NextFunction, Request, Response } from "express";
 import { WebSocketServer } from "ws";
+import { createApp } from "./app.js";
 import * as audio from "./audio.js";
+import { createCalendarSync } from "./calendar.js";
+import { convexCalendarStore } from "./calendar-store.js";
 import { config, missingConfig } from "./config.js";
 import { api, convex, secret, type Id } from "./convex.js";
 import { logger } from "./log.js";
@@ -11,11 +14,17 @@ import { allSessions, dropSession, loadSession, type MeetingSession } from "./se
 import { startSlack } from "./slack.js";
 
 const log = logger("server");
-const app = express();
-app.use(express.json({ limit: "2mb" }));
 
-app.get("/health", (_req, res) => {
-  res.json({ ok: true, missing: missingConfig(), sessions: allSessions().length });
+const syncCalendar = createCalendarSync({ recall: recall.client, store: convexCalendarStore, config });
+
+const app = createApp({
+  health: () => ({ ok: true, missing: missingConfig(), sessions: allSessions().length }),
+  webhooks: {
+    secret: config.recall.webhookSecret,
+    claim: (eventId) => convex.mutation(api.orchestrator.claimWebhook, { secret, eventId }),
+    onRealtime: (evt) => handleRealtime(evt as RealtimeEvent),
+    onDashboard: (evt) => handleDashboard(evt),
+  },
 });
 
 // ------------------------------------------------------------------ auth helpers
@@ -23,15 +32,6 @@ app.get("/health", (_req, res) => {
 /** Calls from Convex carry the shared secret in a header. */
 function internalOnly(req: Request, res: Response, next: NextFunction) {
   if (!config.secret || req.header("x-jarvis-secret") !== config.secret) {
-    res.status(401).json({ error: "Unauthorized" });
-    return;
-  }
-  next();
-}
-
-/** Recall webhooks carry the secret as a ?token= query parameter. */
-function recallOnly(req: Request, res: Response, next: NextFunction) {
-  if (!config.secret || req.query.token !== config.secret) {
     res.status(401).json({ error: "Unauthorized" });
     return;
   }
@@ -64,18 +64,33 @@ app.post(
     const session = await loadSession(meetingId);
     if (!session) throw new Error("Meeting not found or already over.");
     if (session.botId) return { botId: session.botId };
-    let bot: { id: string };
-    try {
-      bot = await recall.createBot({ meetingId, meetUrl: await meetUrlOf(meetingId), botName: session.name });
-    } catch (e) {
-      dropSession(meetingId);
-      throw e;
-    }
-    session.botId = bot.id;
-    await convex.mutation(api.orchestrator.setBot, { secret, meetingId: meetingId as Id<"meetings">, recallBotId: bot.id });
-    return { botId: bot.id };
+    // Two starts for one meeting must not create two bots.
+    const inflight = starting.get(meetingId);
+    if (inflight) return inflight;
+    const p = startBot(meetingId, session).finally(() => starting.delete(meetingId));
+    starting.set(meetingId, p);
+    return p;
   }),
 );
+
+const starting = new Map<string, Promise<{ botId: string }>>();
+
+async function startBot(meetingId: string, session: MeetingSession) {
+  let botId: string;
+  try {
+    // If we crashed after Recall created the bot but before saving its id, reuse that bot.
+    const existing = await recall.client.findBotsByMeetingId(meetingId).catch(() => []);
+    botId =
+      existing[0]?.id ??
+      (await recall.createBot({ meetingId, meetUrl: await meetUrlOf(meetingId), botName: session.name })).id;
+  } catch (e) {
+    dropSession(meetingId);
+    throw e;
+  }
+  session.botId = botId;
+  await convex.mutation(api.orchestrator.setBot, { secret, meetingId: meetingId as Id<"meetings">, recallBotId: botId });
+  return { botId };
+}
 
 async function meetUrlOf(meetingId: string) {
   const ctx = await convex.query(api.orchestrator.meetingContext, { secret, meetingId: meetingId as Id<"meetings"> });
@@ -100,6 +115,37 @@ app.post(
     }
     await finish(session);
   }),
+);
+
+app.post(
+  "/meetings/unschedule",
+  internalOnly,
+  route(async (body) => {
+    const meetingId = str(body.meetingId, "meetingId");
+    const ctx = await convex.query(api.orchestrator.meetingContext, { secret, meetingId: meetingId as Id<"meetings"> });
+    const eventId = ctx?.meeting.calendarEventId;
+    if (eventId) await recall.client.removeCalendarEventBot(eventId);
+    dropSession(meetingId);
+  }),
+);
+
+app.post(
+  "/calendar/list",
+  internalOnly,
+  route(async () => ({
+    calendars: (await recall.client.listCalendars()).map((c) => ({
+      id: c.id,
+      platform: c.platform,
+      platformEmail: c.platform_email ?? null,
+      status: c.status,
+    })),
+  })),
+);
+
+app.post(
+  "/calendar/sync",
+  internalOnly,
+  route(async (body) => ({ result: await syncCalendar(str(body.recallCalendarId, "recallCalendarId")) })),
 );
 
 async function finish(session: MeetingSession, failed = false, error?: string) {
@@ -160,6 +206,7 @@ app.post(
 );
 
 // ------------------------------------------------------------------ Recall webhooks
+// Requests are verified and acknowledged in webhooks.ts; these handlers do the work afterwards.
 
 type Participant = { id: number; name: string | null };
 type Word = { text: string; start_timestamp?: { relative: number } };
@@ -188,57 +235,54 @@ async function sessionForBot(bot?: { id: string; metadata?: Record<string, strin
   return s;
 }
 
-app.post("/recall/realtime", recallOnly, (req, res) => {
-  res.sendStatus(200);
-  void (async () => {
-    const evt = req.body as RealtimeEvent;
-    const session = await sessionForBot(evt.data?.bot);
-    if (!session || session.ended) return;
-    const inner = evt.data.data;
-    const participant = inner.participant;
-    const speaker = participant?.name?.trim() || "Someone";
-    const pid = participant?.id ?? -1;
+async function handleRealtime(evt: RealtimeEvent) {
+  const session = await sessionForBot(evt.data?.bot);
+  if (!session || session.ended) return;
+  const inner = evt.data.data;
+  const participant = inner.participant;
+  const speaker = participant?.name?.trim() || "Someone";
+  const pid = participant?.id ?? -1;
 
-    if (evt.event === "transcript.partial_data" || evt.event === "transcript.data") {
-      const words = inner.words ?? [];
-      const text = words.map((w) => w.text).join(" ").replace(/\s+([,.!?])/g, "$1").trim();
-      if (!text) return;
-      // Transcript flowing means the bot is in the call, even if no status webhook arrived.
-      void session.goLive();
-      if (evt.event === "transcript.partial_data") session.onPartial(pid, speaker, text);
-      else await session.onFinal(pid, speaker, text, words[0]?.start_timestamp?.relative ?? 0);
-    } else if (evt.event === "participant_events.chat_message") {
-      const text = inner.data?.text ?? "";
-      if (text) await session.onChat(speaker, text);
-    }
-  })().catch((e) => log.error(`realtime event failed: ${(e as Error).message}`));
-});
-
-type StatusEvent = {
-  event: string;
-  data: { data: { code: string; sub_code: string | null }; bot: { id: string; metadata?: Record<string, string> } };
-};
+  if (evt.event === "transcript.partial_data" || evt.event === "transcript.data") {
+    const words = inner.words ?? [];
+    const text = words.map((w) => w.text).join(" ").replace(/\s+([,.!?])/g, "$1").trim();
+    if (!text) return;
+    // Transcript flowing means the bot is in the call, even if no status webhook arrived.
+    void session.goLive();
+    if (evt.event === "transcript.partial_data") session.onPartial(pid, speaker, text);
+    else await session.onFinal(pid, speaker, text, words[0]?.start_timestamp?.relative ?? 0);
+  } else if (evt.event === "participant_events.chat_message") {
+    const text = inner.data?.text ?? "";
+    if (text) await session.onChat(speaker, text);
+  }
+}
 
 async function applyStatus(session: MeetingSession, code: string, subCode: string | null) {
-  if (code === "in_call_recording") await session.goLive();
+  if (code === "joining_call" || code === "in_waiting_room") {
+    await convex.mutation(api.orchestrator.setStatus, { secret, meetingId: session.meetingId, status: "joining" });
+  } else if (code === "in_call_recording") await session.goLive();
   else if (code === "call_ended" || code === "done") await finish(session);
   else if (code === "fatal") await finish(session, true, `The bot couldn't stay in the call (${subCode ?? "fatal error"}).`);
 }
 
-// Optional: configure this URL as a bot status webhook in the Recall dashboard.
-app.post("/recall/status", recallOnly, (req, res) => {
-  res.sendStatus(200);
-  void (async () => {
-    const evt = req.body as StatusEvent;
-    const code = evt.event?.replace(/^bot\./, "") ?? evt.data?.data?.code;
+type DashboardEvent = { event: string; data: Record<string, any> };
+
+async function handleDashboard(evt: DashboardEvent) {
+  if (evt.event.startsWith("bot.")) {
+    const code = evt.event.replace(/^bot\./, "");
     const session = await sessionForBot(evt.data?.bot);
     if (!session || session.ended) return;
     log.info(`status ${code} for ${session.meetingId}`);
     await applyStatus(session, code, evt.data?.data?.sub_code ?? null);
-  })().catch((e) => log.error(`status event failed: ${(e as Error).message}`));
-});
+  } else if (evt.event === "calendar.sync_events") {
+    const calendarId = evt.data?.calendar_id;
+    if (typeof calendarId === "string") await syncCalendar(calendarId);
+  } else if (evt.event === "calendar.update") {
+    log.warn("a calendar changed state (it may have disconnected); check it in Recall");
+  }
+}
 
-// Fallback poller so meetings start and end correctly even without the status webhook.
+// Fallback poller so meetings start and end correctly even if a status webhook is missed.
 setInterval(() => {
   for (const s of allSessions()) {
     if (!s.botId || s.ended || s.botId.startsWith("sim-")) continue; // sim-: simulated meetings
@@ -248,6 +292,14 @@ setInterval(() => {
       .catch((e) => log.warn(`status poll failed: ${(e as Error).message}`));
   }
 }, 10_000);
+
+// Calendar webhooks can be missed while the server is down, so every linked calendar is re-synced on a timer.
+async function reconcileCalendars() {
+  if (!config.secret || !config.recall.apiKey) return;
+  const links = await convex.query(api.orchestrator.calendarLinks, { secret });
+  for (const l of links) await syncCalendar(l.recallCalendarId).catch((e) => log.warn(`calendar sync failed: ${(e as Error).message}`));
+}
+setInterval(() => void reconcileCalendars().catch((e) => log.warn(`reconcile failed: ${(e as Error).message}`)), 10 * 60_000);
 
 // ------------------------------------------------------------------ server + audio socket
 
@@ -280,5 +332,6 @@ server.listen(config.port, () => {
   const missing = missingConfig();
   if (missing.length) log.warn(`not configured: ${missing.join(", ")}`);
   void resumeActiveMeetings();
+  void reconcileCalendars().catch((e) => log.warn(`reconcile failed: ${(e as Error).message}`));
   void startSlack().catch((e) => log.error(`Slack failed to start: ${(e as Error).message}`));
 });

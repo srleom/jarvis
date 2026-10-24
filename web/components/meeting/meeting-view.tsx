@@ -109,17 +109,25 @@ export function MeetingView({
                   {meeting.title ??
                     (inProgress
                       ? "Meeting in progress"
-                      : meeting.status === "failed"
-                        ? "Couldn't join the call"
-                        : "Writing notes…")}
+                      : meeting.status === "scheduled"
+                        ? "Scheduled meeting"
+                        : meeting.status === "cancelled"
+                          ? "Cancelled meeting"
+                          : meeting.status === "failed"
+                            ? "Couldn't join the call"
+                            : "Writing notes…")}
                 </h1>
                 {meeting.status === "live" && <StatusBadge status="live" label="Live" />}
                 {meeting.status === "joining" && <StatusBadge status="joining" label="Waiting to be admitted" />}
+                {meeting.status === "scheduled" && <StatusBadge status="scheduled" />}
+                {meeting.status === "cancelled" && <StatusBadge status="cancelled" />}
                 {meeting.status === "failed" && <StatusBadge status="failed" />}
               </div>
               <p className="mt-1.5 text-sm text-muted-foreground">
                 {formatDate(meeting.startedAt)} · {formatTime(meeting.startedAt)} ·{" "}
-                {formatDuration(end - meeting.startedAt)}
+                {meeting.status === "scheduled" || meeting.status === "cancelled"
+                  ? "from calendar"
+                  : formatDuration(end - meeting.startedAt)}
                 <span className="mx-1.5">·</span>
                 <a
                   href={meeting.meetUrl}
@@ -204,7 +212,8 @@ function MeetingActions({ meeting, agentId }: { meeting: Doc<"meetings">; agentI
   const leave = useMutation(api.meetings.leave);
   const remove = useMutation(api.meetings.remove);
   const [busy, setBusy] = useState(false);
-  const inProgress = meeting.status === "live" || meeting.status === "joining";
+  const scheduled = meeting.status === "scheduled";
+  const inProgress = meeting.status === "live" || meeting.status === "joining" || scheduled;
 
   return (
     <div className="flex items-center gap-2">
@@ -226,7 +235,7 @@ function MeetingActions({ meeting, agentId }: { meeting: Doc<"meetings">; agentI
             setBusy(true);
             try {
               await leave({ meetingId: meeting._id });
-              toast.success("Leaving the call. Notes will follow.");
+              toast.success(scheduled ? "Meeting cancelled." : "Leaving the call. Notes will follow.");
             } catch (e) {
               toast.error(errorMessage(e));
             } finally {
@@ -234,7 +243,7 @@ function MeetingActions({ meeting, agentId }: { meeting: Doc<"meetings">; agentI
             }
           }}
         >
-          <PhoneOff /> Remove from call
+          <PhoneOff /> {scheduled ? "Cancel meeting" : "Remove from call"}
         </Button>
       ) : (
         <AlertDialog>

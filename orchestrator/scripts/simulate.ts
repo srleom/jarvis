@@ -7,13 +7,20 @@
  *
  * Then open http://localhost:3000/bot/<meetingId> to watch.
  */
+import { signRecallPayload } from "../src/verify.js";
+
 const meetingId = process.argv[2];
 if (!meetingId) {
   console.error("Usage: pnpm simulate <meetingId>");
   process.exit(1);
 }
 const base = (process.env.SIMULATE_URL ?? `http://localhost:${process.env.PORT ?? 8787}`).replace(/\/$/, "");
-const url = `${base}/recall/realtime/?token=${encodeURIComponent(process.env.ORCHESTRATOR_SECRET ?? "")}`;
+const url = `${base}/recall/realtime/`;
+const webhookSecret = process.env.RECALL_WEBHOOK_VERIFICATION_SECRET ?? "";
+if (!webhookSecret) {
+  console.error("Set RECALL_WEBHOOK_VERIFICATION_SECRET (the same value the orchestrator uses) so events can be signed.");
+  process.exit(1);
+}
 const bot = { id: `sim-${meetingId}`, metadata: { meetingId } };
 
 const script: [string, number, string][] = [
@@ -27,12 +34,17 @@ const script: [string, number, string][] = [
   ["Priya Nair", 3, "I'll draft the sponsor deck. Do we need overnight security?"],
 ];
 
+let seq = 0;
 async function post(event: string, participant: { id: number; name: string }, text: string, t: number) {
   const words = text.split(" ").map((w, i) => ({ text: w, start_timestamp: { relative: t + i * 0.3 } }));
+  const body = JSON.stringify({ event, data: { data: { words, participant }, bot } });
   await fetch(url, {
     method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ event, data: { data: { words, participant }, bot } }),
+    headers: {
+      "content-type": "application/json",
+      ...signRecallPayload(webhookSecret, `msg_sim_${meetingId}_${Date.now()}_${seq++}`, body),
+    },
+    body,
   });
 }
 

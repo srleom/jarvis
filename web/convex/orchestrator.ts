@@ -26,6 +26,14 @@ export const meetingContext = query({
   },
 });
 
+export const agentName = query({
+  args: { secret, agentId: v.id("agents") },
+  handler: async (ctx, args) => {
+    assertSecret(args.secret);
+    return (await ctx.db.get("agents", args.agentId))?.name ?? null;
+  },
+});
+
 export const meetingByBotId = query({
   args: { secret, recallBotId: v.string() },
   handler: async (ctx, args) => {
@@ -65,16 +73,23 @@ export const setStatus = mutation({
   args: {
     secret,
     meetingId: v.id("meetings"),
-    status: v.union(v.literal("live"), v.literal("ended"), v.literal("failed")),
+    status: v.union(v.literal("joining"), v.literal("live"), v.literal("ended"), v.literal("failed")),
     error: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     assertSecret(args.secret);
     const meeting = await ctx.db.get("meetings", args.meetingId);
     if (!meeting) return;
-    if (meeting.status === "ended" || meeting.status === "failed") return;
+    if (meeting.status === "ended" || meeting.status === "failed" || meeting.status === "cancelled") return;
+    if (args.status === "joining") {
+      // A calendar bot has started joining: the agent is now busy.
+      if (meeting.status === "scheduled") {
+        await ctx.db.patch("meetings", args.meetingId, { status: "joining", startedAt: Date.now() });
+      }
+      return;
+    }
     if (args.status === "live") {
-      if (meeting.status === "joining") {
+      if (meeting.status === "joining" || meeting.status === "scheduled") {
         await ctx.db.patch("meetings", args.meetingId, { status: "live", startedAt: Date.now() });
       }
       return;
@@ -373,5 +388,142 @@ export const meetingDigest = query({
       .withIndex("by_meeting", (q) => q.eq("meetingId", args.meetingId))
       .first();
     return { meeting, board, transcript: transcript.reverse(), notes };
+  },
+});
+
+// ------------------------------------------------------------------ webhooks and calendar scheduling
+
+/** True the first time a Recall webhook message id is seen. Retries of the same message get false. */
+export const claimWebhook = mutation({
+  args: { secret, eventId: v.string() },
+  handler: async (ctx, args) => {
+    assertSecret(args.secret);
+    const seen = await ctx.db
+      .query("webhookEvents")
+      .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
+      .first();
+    if (seen) return false;
+    await ctx.db.insert("webhookEvents", { eventId: args.eventId, createdAt: Date.now() });
+    return true;
+  },
+});
+
+export const calendarLinks = query({
+  args: { secret },
+  handler: async (ctx, args) => {
+    assertSecret(args.secret);
+    return await ctx.db.query("calendarLinks").take(100);
+  },
+});
+
+export const calendarLinkByCalendarId = query({
+  args: { secret, recallCalendarId: v.string() },
+  handler: async (ctx, args) => {
+    assertSecret(args.secret);
+    return await ctx.db
+      .query("calendarLinks")
+      .withIndex("by_recallCalendarId", (q) => q.eq("recallCalendarId", args.recallCalendarId))
+      .first();
+  },
+});
+
+export const setCalendarSynced = mutation({
+  args: { secret, linkId: v.id("calendarLinks"), syncedThrough: v.string() },
+  handler: async (ctx, args) => {
+    assertSecret(args.secret);
+    await ctx.db.patch("calendarLinks", args.linkId, { syncedThrough: args.syncedThrough });
+  },
+});
+
+/**
+ * Records the intent to record a calendar event before Recall is asked to schedule the bot.
+ * Idempotent per event: a re-sync updates the existing scheduled meeting instead of adding another.
+ */
+export const scheduleCalendarMeeting = mutation({
+  args: {
+    secret,
+    agentId: v.id("agents"),
+    calendarEventId: v.string(),
+    meetUrl: v.string(),
+    title: v.optional(v.string()),
+    scheduledFor: v.number(),
+    scheduledEnd: v.number(),
+  },
+  handler: async (ctx, args) => {
+    assertSecret(args.secret);
+    const agent = await ctx.db.get("agents", args.agentId);
+    if (!agent) return { kind: "skipped" as const, reason: "agent_missing" };
+
+    const existing = await ctx.db
+      .query("meetings")
+      .withIndex("by_calendarEventId", (q) => q.eq("calendarEventId", args.calendarEventId))
+      .first();
+    if (existing) {
+      if (existing.status === "cancelled") return { kind: "skipped" as const, reason: "cancelled" };
+      if (existing.status !== "scheduled") return { kind: "skipped" as const, reason: "already_started" };
+      await ctx.db.patch("meetings", existing._id, {
+        meetUrl: args.meetUrl,
+        title: args.title,
+        startedAt: args.scheduledFor,
+        scheduledFor: args.scheduledFor,
+        scheduledEnd: args.scheduledEnd,
+      });
+      return { kind: "scheduled" as const, meetingId: existing._id };
+    }
+
+    // One agent can only be in one call at a time, so the first overlapping event wins.
+    const others = await ctx.db
+      .query("meetings")
+      .withIndex("by_agent_and_status", (q) => q.eq("agentId", args.agentId).eq("status", "scheduled"))
+      .take(100);
+    const clash = others.find(
+      (m) => (m.scheduledFor ?? 0) < args.scheduledEnd && (m.scheduledEnd ?? 0) > args.scheduledFor,
+    );
+    if (clash) return { kind: "skipped" as const, reason: "overlaps_another_meeting" };
+
+    const meetingId = await ctx.db.insert("meetings", {
+      agentId: args.agentId,
+      meetUrl: args.meetUrl,
+      title: args.title,
+      status: "scheduled",
+      source: "calendar",
+      calendarEventId: args.calendarEventId,
+      scheduledFor: args.scheduledFor,
+      scheduledEnd: args.scheduledEnd,
+      mossDocIds: [],
+      startedAt: args.scheduledFor,
+    });
+    await ctx.db.insert("avatarState", { meetingId, state: "listening" });
+    await ctx.db.patch("agents", agent._id, { meetingCount: agent.meetingCount + 1 });
+    return { kind: "scheduled" as const, meetingId };
+  },
+});
+
+/** Drops a scheduled meeting that never got a bot (Recall refused the request). */
+export const discardScheduled = mutation({
+  args: { secret, meetingId: v.id("meetings") },
+  handler: async (ctx, args) => {
+    assertSecret(args.secret);
+    const meeting = await ctx.db.get("meetings", args.meetingId);
+    if (!meeting || meeting.status !== "scheduled" || meeting.recallBotId) return;
+    await ctx.db.delete("meetings", meeting._id);
+    await ctx.scheduler.runAfter(0, internal.cleanup.meetingData, { meetingId: meeting._id });
+    const agent = await ctx.db.get("agents", meeting.agentId);
+    if (agent) await ctx.db.patch("agents", agent._id, { meetingCount: Math.max(0, agent.meetingCount - 1) });
+  },
+});
+
+/** The calendar event was deleted, or no longer qualifies: stop planning to join it. */
+export const cancelCalendarMeeting = mutation({
+  args: { secret, calendarEventId: v.string() },
+  handler: async (ctx, args) => {
+    assertSecret(args.secret);
+    const meeting = await ctx.db
+      .query("meetings")
+      .withIndex("by_calendarEventId", (q) => q.eq("calendarEventId", args.calendarEventId))
+      .first();
+    if (!meeting || meeting.status !== "scheduled") return null;
+    await ctx.db.patch("meetings", meeting._id, { status: "cancelled", endedAt: Date.now() });
+    return meeting._id;
   },
 });

@@ -64,16 +64,34 @@ To use a Convex cloud project instead, run `npx convex dev` (it asks you to log 
 
 ### Putting it in a real call
 
-Recall's bot runs in the cloud, so it needs public URLs for both the bot page and the orchestrator (it blocks `localhost`):
+Recall's bot runs in the cloud, so the bot page, the orchestrator and Convex must all be reachable from the internet (it blocks `localhost`). The setup we use:
 
-```bash
-ngrok http 3000      # → BOT_PAGE_BASE_URL
-ngrok http 8787      # → ORCHESTRATOR_PUBLIC_URL, and NEXT_PUBLIC_ORCHESTRATOR_WS_URL=wss://…
-```
+- **Convex:** a cloud dev deployment (`npx convex dev`, logged in). Set `ORCHESTRATOR_URL` on it to the orchestrator's public URL.
+- **Web app:** deployed to Vercel from `web/` with `npx vercel deploy --prod`. The Vercel project needs `NEXT_PUBLIC_CONVEX_URL` and `NEXT_PUBLIC_ORCHESTRATOR_WS_URL` (`wss://<orchestrator public host>`). These are baked in at build time, so redeploy after changing them. Point `BOT_PAGE_BASE_URL` at the production URL (production domains aren't behind Vercel's login wall; per-deployment preview URLs are).
+- **Orchestrator:** runs locally behind a static ngrok domain (`ngrok http 8787`) → `PUBLIC_API_BASE_URL`, with `CONVEX_URL` set to the cloud deployment.
 
-Optionally add `https://<orchestrator>/recall/status/?token=<ORCHESTRATOR_SECRET>` as a bot status webhook in the Recall dashboard. Without it, the orchestrator polls bot status every 10 seconds.
+Recall also needs a verified webhook endpoint (see [Recall webhooks and calendar](#recall-webhooks-and-calendar)). Without it, the orchestrator still polls bot status every 10 seconds, but calendar scheduling needs the webhook.
 
 Then create an agent, add your team, upload a brief, paste a Meet link and click Send. Admit Jarvis from the lobby.
+
+### Recall webhooks and calendar
+
+Meeting bots reach calls two ways. Both end up in the same meeting flow (whiteboard, answers, relay, notes):
+
+| Path | Use it for |
+|---|---|
+| **Calendar** (production) | Link a Google Calendar to an agent on its Settings tab. Jarvis joins every future Google Meet event on that calendar. |
+| **Pasted link** ("Send to a meeting now") | Testing, or a one-off call that isn't on a calendar. |
+
+**Calendar rule.** With `CALENDAR_OPT_IN=all` (the default) Jarvis joins *every* future Meet event on the linked calendar, so only link a calendar whose events you are happy to have recorded. Add `[nojarvis]` to an event title or description to skip it, or decline the event. Set `CALENDAR_OPT_IN=tagged` to join only events containing `[jarvis]`. Jarvis announces itself in the call and chat when it joins. Events that already ended, were deleted, or have no Google Meet link are skipped, as are events that overlap another meeting for the same agent.
+
+**Backend settings** (orchestrator only, never the browser): `RECALL_API_KEY`, `RECALL_REGION=us-west-2`, `RECALL_WEBHOOK_VERIFICATION_SECRET`, `PUBLIC_API_BASE_URL`.
+
+**Webhook endpoint.** In the Recall dashboard (US West) add `https://<PUBLIC_API_BASE_URL host>/recall/webhooks` subscribed to `bot.joining_call`, `bot.in_waiting_room`, `bot.in_call_recording`, `bot.call_ended`, `bot.done`, `bot.fatal`, `calendar.sync_events` and `calendar.update`. Every request is verified against the raw body with the workspace verification secret, de-duplicated by message id in Convex, and acknowledged before processing. In-call transcript and chat events go to `/recall/realtime/`, which each bot is told about when it is created. No secret ever appears in a URL.
+
+**Reliability notes.** Retried webhooks are processed once. A missed calendar webhook is repaired by a re-sync of every linked calendar every 10 minutes. Recall API calls honour `Retry-After` and back off on 429/503/507; a create is never retried after an ambiguous connection failure, and before creating a bot the orchestrator checks whether Recall already holds one for that meeting.
+
+**Tests.** `cd orchestrator && pnpm test` (signature verification, Recall client retries, calendar rules, webhook idempotency over real HTTP) and `pnpm smoke` (boots the HTTP app with fake settings and makes real loopback requests).
 
 ### Trying the live flows without a call
 
@@ -82,7 +100,7 @@ cd web && npx convex run seed:liveMeeting '{"agentId":"<agent id>"}'
 cd ../orchestrator && pnpm simulate <meetingId>
 ```
 
-This posts fake Recall transcript events (including a "Hey Jarvis" question) to the orchestrator. Open `http://localhost:3000/bot/<meetingId>` to watch the board and avatar.
+This posts signed fake Recall transcript events (it needs the same `RECALL_WEBHOOK_VERIFICATION_SECRET` as the server) (including a "Hey Jarvis" question) to the orchestrator. Open `http://localhost:3000/bot/<meetingId>` to watch the board and avatar.
 
 ## How each sponsor tool is used
 

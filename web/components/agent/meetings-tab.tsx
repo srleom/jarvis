@@ -58,18 +58,27 @@ export function MeetingsTab({ agentId }: { agentId: Id<"agents"> }) {
                   {m.title ??
                     (inProgress
                       ? "Meeting in progress"
-                      : m.status === "failed"
-                        ? "Couldn't join"
-                        : "Writing notes…")}
+                      : m.status === "scheduled"
+                        ? "Scheduled meeting"
+                        : m.status === "cancelled"
+                          ? "Cancelled meeting"
+                          : m.status === "failed"
+                            ? "Couldn't join"
+                            : "Writing notes…")}
                 </p>
                 <p className="mt-0.5 truncate text-sm text-muted-foreground">
                   {formatDate(m.startedAt)} · {formatTime(m.startedAt)}
-                  {m.status !== "failed" && <> · {formatDuration(end - m.startedAt)}</>}
+                  {m.status !== "failed" && m.status !== "scheduled" && m.status !== "cancelled" && (
+                    <> · {formatDuration(end - m.startedAt)}</>
+                  )}
+                  {m.source === "calendar" && <> · from calendar</>}
                   {m.status === "failed" && m.error && <> · {m.error}</>}
                 </p>
               </div>
               {m.status === "live" && <StatusBadge status="live" label="Live" />}
               {m.status === "joining" && <StatusBadge status="joining" />}
+              {m.status === "scheduled" && <StatusBadge status="scheduled" />}
+              {m.status === "cancelled" && <StatusBadge status="cancelled" />}
               {m.status === "failed" && <StatusBadge status="failed" />}
               <ChevronRight className="size-4 shrink-0 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5" />
             </Link>

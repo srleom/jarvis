@@ -1,11 +1,13 @@
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
+import type { Doc } from "./_generated/dataModel";
 import {
   internalAction,
   internalMutation,
   internalQuery,
   mutation,
   query,
+  type MutationCtx,
 } from "./_generated/server";
 import { getActiveMeeting } from "./agents";
 import { callOrchestrator } from "./lib/orchestrator";
@@ -34,6 +36,7 @@ export const send = mutation({
     const meetingId = await ctx.db.insert("meetings", {
       agentId: args.agentId,
       meetUrl,
+      source: "manual",
       status: "joining",
       mossDocIds: [],
       startedAt: Date.now(),
@@ -63,12 +66,38 @@ export const markFailed = internalMutation({
   args: { meetingId: v.id("meetings"), error: v.string() },
   handler: async (ctx, { meetingId, error }) => {
     const meeting = await ctx.db.get("meetings", meetingId);
-    if (!meeting || meeting.status === "ended") return;
+    if (!meeting || meeting.status === "ended" || meeting.status === "cancelled") return;
     await ctx.db.patch("meetings", meetingId, {
       status: "failed",
       error,
       endedAt: Date.now(),
     });
+  },
+});
+
+async function cancelScheduledMeeting(ctx: MutationCtx, meeting: Doc<"meetings">) {
+  await ctx.db.patch("meetings", meeting._id, { status: "cancelled", endedAt: Date.now() });
+  await ctx.scheduler.runAfter(0, internal.meetings.unscheduleBot, { meetingId: meeting._id });
+}
+
+/** Stops a calendar meeting from happening. Kept as "cancelled" so the next sync doesn't re-add it. */
+export const cancelScheduled = mutation({
+  args: { meetingId: v.id("meetings") },
+  handler: async (ctx, { meetingId }) => {
+    const meeting = await ctx.db.get("meetings", meetingId);
+    if (!meeting || meeting.status !== "scheduled") throw new ConvexError("This meeting isn't scheduled.");
+    await cancelScheduledMeeting(ctx, meeting);
+  },
+});
+
+export const unscheduleBot = internalAction({
+  args: { meetingId: v.id("meetings") },
+  handler: async (_ctx, { meetingId }) => {
+    try {
+      await callOrchestrator("/meetings/unschedule", { meetingId });
+    } catch {
+      // The bot would still join, but the orchestrator ends cancelled meetings it sees. Nothing to retry here.
+    }
   },
 });
 
@@ -78,6 +107,10 @@ export const leave = mutation({
   handler: async (ctx, { meetingId }) => {
     const meeting = await ctx.db.get("meetings", meetingId);
     if (!meeting) return;
+    if (meeting.status === "scheduled") {
+      await cancelScheduledMeeting(ctx, meeting);
+      return;
+    }
     if (meeting.status === "joining" && !meeting.recallBotId) {
       await ctx.db.patch("meetings", meetingId, {
         status: "failed",
@@ -109,7 +142,7 @@ export const finish = internalMutation({
   args: { meetingId: v.id("meetings"), reason: v.optional(v.string()) },
   handler: async (ctx, { meetingId }) => {
     const meeting = await ctx.db.get("meetings", meetingId);
-    if (!meeting || meeting.status === "ended" || meeting.status === "failed") return;
+    if (!meeting || meeting.status === "ended" || meeting.status === "failed" || meeting.status === "cancelled") return;
     await ctx.db.patch("meetings", meetingId, { status: "ended", endedAt: Date.now() });
     await ctx.scheduler.runAfter(0, internal.notes.generate, { meetingId });
   },
@@ -122,6 +155,9 @@ export const remove = mutation({
     if (!meeting) return;
     if (meeting.status === "live" || meeting.status === "joining") {
       throw new ConvexError("Remove the agent from the call before deleting this meeting.");
+    }
+    if (meeting.status === "scheduled") {
+      throw new ConvexError("Cancel this scheduled meeting before deleting it.");
     }
     const agent = await ctx.db.get("agents", meeting.agentId);
     await ctx.db.delete("meetings", meetingId);
