@@ -491,7 +491,7 @@ export class MeetingSession {
     if (this.botId) {
       void recall.sendChat(
         this.botId,
-        `✋ ${next.preview} Say "Go ahead, ${this.name}" or type "go" when you're ready.`,
+        `✋✋✋ ${this.name.toUpperCase()} HAS A HAND RAISED ✋✋✋\n${next.preview}\nSay "Go ahead, ${this.name}" or type "go" in chat when you're ready.`,
       );
     }
   }
