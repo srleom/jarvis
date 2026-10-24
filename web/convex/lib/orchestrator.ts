@@ -1,10 +1,7 @@
 import { env } from "../_generated/server";
 
 /** Calls the orchestrator's internal HTTP API. Throws with a readable message on failure. */
-export async function callOrchestrator<T = unknown>(
-  path: string,
-  body: unknown,
-): Promise<T> {
+export async function callOrchestrator<T = unknown>(path: string, body: unknown): Promise<T> {
   const base = env.ORCHESTRATOR_URL;
   if (!base) {
     throw new Error(

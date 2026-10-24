@@ -21,8 +21,8 @@ export default function AgentsPage() {
           <div>
             <h1 className="font-serif text-[44px] leading-none tracking-tight">Agents</h1>
             <p className="mt-3 max-w-md text-muted-foreground">
-              AI teammates that join your Google Meet calls, keep a live whiteboard and bring absent
-              teammates in from Slack.
+              AI teammates that join your Google Meet calls, keep a live whiteboard and bring absent teammates in from
+              Slack.
             </p>
           </div>
           {agents && agents.length > 0 && <NewAgentDialog />}
@@ -42,8 +42,7 @@ export default function AgentsPage() {
               </div>
               <h2 className="mt-5 text-lg font-medium">Create your first agent</h2>
               <p className="mt-1.5 max-w-sm text-sm text-muted-foreground">
-                Give it a name and a Slack channel. Then add your team, upload a brief, and send it
-                into a call.
+                Give it a name and a Slack channel. Then add your team, upload a brief, and send it into a call.
               </p>
               <div className="mt-6">
                 <NewAgentDialog />

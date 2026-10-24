@@ -18,7 +18,9 @@ const base = (process.env.SIMULATE_URL ?? `http://localhost:${process.env.PORT ?
 const url = `${base}/recall/realtime/`;
 const webhookSecret = process.env.RECALL_WEBHOOK_VERIFICATION_SECRET ?? "";
 if (!webhookSecret) {
-  console.error("Set RECALL_WEBHOOK_VERIFICATION_SECRET (the same value the orchestrator uses) so events can be signed.");
+  console.error(
+    "Set RECALL_WEBHOOK_VERIFICATION_SECRET (the same value the orchestrator uses) so events can be signed.",
+  );
   process.exit(1);
 }
 const bot = { id: `sim-${meetingId}`, metadata: { meetingId } };
@@ -37,7 +39,10 @@ const script: [string, number, string][] = [
 let seq = 0;
 async function post(event: string, participant: { id: number; name: string }, text: string, t: number) {
   const words = text.split(" ").map((w, i) => ({ text: w, start_timestamp: { relative: t + i * 0.3 } }));
-  const body = JSON.stringify({ event, data: { data: { words, participant }, bot } });
+  const body = JSON.stringify({
+    event,
+    data: { data: { words, participant }, bot },
+  });
   await fetch(url, {
     method: "POST",
     headers: {

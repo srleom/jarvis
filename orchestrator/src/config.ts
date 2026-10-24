@@ -7,12 +7,16 @@ function reader(env: Env) {
 /** Builds the settings from an environment map, so tests can inject fake values. */
 export function buildConfig(env: Env) {
   const opt = reader(env);
+  const calendarOptIn: "all" | "tagged" = opt("CALENDAR_OPT_IN", "all") === "tagged" ? "tagged" : "all";
   return {
     port: Number(opt("PORT", "8787")),
     /** Shared with the Convex deployment's ORCHESTRATOR_SECRET (internal calls from Convex). */
     secret: opt("ORCHESTRATOR_SECRET"),
     /** Stable public base URL of this server. Recall sends webhooks and the calendar callback here. */
-    publicUrl: (opt("PUBLIC_API_BASE_URL") || opt("ORCHESTRATOR_PUBLIC_URL", "http://localhost:8787")).replace(/\/$/, ""),
+    publicUrl: (opt("PUBLIC_API_BASE_URL") || opt("ORCHESTRATOR_PUBLIC_URL", "http://localhost:8787")).replace(
+      /\/$/,
+      "",
+    ),
     /** Public base URL of the Next.js app (Recall renders /bot/[meetingId] from here). */
     botPageBaseUrl: opt("BOT_PAGE_BASE_URL", "http://localhost:3000").replace(/\/$/, ""),
     convexUrl: opt("CONVEX_URL", "http://127.0.0.1:3210"),
@@ -25,7 +29,7 @@ export function buildConfig(env: Env) {
       /** "screenshare" (default) or "camera" if screenshare doesn't work in Meet. */
       outputMode: opt("RECALL_OUTPUT_MODE", "screenshare") as "screenshare" | "camera",
       /** "all": every future Meet event on a linked calendar. "tagged": only events containing [jarvis]. */
-      calendarOptIn: (opt("CALENDAR_OPT_IN", "all") === "tagged" ? "tagged" : "all") as "all" | "tagged",
+      calendarOptIn,
     },
     anthropicKey: opt("ANTHROPIC_API_KEY"),
     cartesia: {
@@ -59,7 +63,10 @@ export function missingConfig(c: Config = config) {
     ["ORCHESTRATOR_SECRET", !!c.secret],
     ["RECALL_API_KEY", !!c.recall.apiKey],
     ["RECALL_WEBHOOK_VERIFICATION_SECRET", !!c.recall.webhookSecret],
-    ["PUBLIC_API_BASE_URL (a public https URL, not localhost)", /^https:\/\//.test(c.publicUrl) && !/localhost|127\.0\.0\.1/.test(c.publicUrl)],
+    [
+      "PUBLIC_API_BASE_URL (a public https URL, not localhost)",
+      /^https:\/\//.test(c.publicUrl) && !/localhost|127\.0\.0\.1/.test(c.publicUrl),
+    ],
     ["ANTHROPIC_API_KEY", !!c.anthropicKey],
     ["CARTESIA_API_KEY / CARTESIA_VOICE_ID", !!c.cartesia.apiKey && !!c.cartesia.voiceId],
     ["MOSS_PROJECT_ID / MOSS_PROJECT_KEY", !!c.moss.projectId && !!c.moss.projectKey],

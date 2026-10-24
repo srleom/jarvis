@@ -8,7 +8,15 @@ const now = 1_800_000_000_000;
 const signed = () => signRecallPayload(FAKE_SECRET, "msg_1", payload, now / 1000);
 
 test("accepts a correctly signed raw body and returns the message id", () => {
-  assert.equal(verifyRecallRequest({ secret: FAKE_SECRET, headers: signed(), payload, now }), "msg_1");
+  assert.equal(
+    verifyRecallRequest({
+      secret: FAKE_SECRET,
+      headers: signed(),
+      payload,
+      now,
+    }),
+    "msg_1",
+  );
 });
 
 test("accepts svix-* headers and a rotated secret's extra signature", () => {
@@ -22,7 +30,14 @@ test("accepts svix-* headers and a rotated secret's extra signature", () => {
 });
 
 test("rejects a tampered body", () => {
-  assert.throws(() => verifyRecallRequest({ secret: FAKE_SECRET, headers: signed(), payload: payload + " ", now }));
+  assert.throws(() =>
+    verifyRecallRequest({
+      secret: FAKE_SECRET,
+      headers: signed(),
+      payload: payload + " ",
+      now,
+    }),
+  );
 });
 
 test("rejects the wrong secret", () => {
@@ -32,6 +47,13 @@ test("rejects the wrong secret", () => {
 
 test("rejects missing headers, stale timestamps and a missing secret", () => {
   assert.throws(() => verifyRecallRequest({ secret: FAKE_SECRET, headers: {}, payload, now }));
-  assert.throws(() => verifyRecallRequest({ secret: FAKE_SECRET, headers: signed(), payload, now: now + 10 * 60_000 }));
+  assert.throws(() =>
+    verifyRecallRequest({
+      secret: FAKE_SECRET,
+      headers: signed(),
+      payload,
+      now: now + 10 * 60_000,
+    }),
+  );
   assert.throws(() => verifyRecallRequest({ secret: "", headers: signed(), payload, now }));
 });

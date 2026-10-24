@@ -33,20 +33,17 @@ export function Board({
   return (
     <div className={cn("grid grid-cols-5", stage ? "gap-3" : "gap-2.5 min-w-[880px]", className)}>
       {COLUMNS.map((col) => {
-        const all = notes
-          .filter((n) => n.column === col.key)
-          .sort((a, b) => a.createdAt - b.createdAt);
+        const all = notes.filter((n) => n.column === col.key).sort((a, b) => a.createdAt - b.createdAt);
         const hidden = Math.max(0, all.length - maxVisible);
         const visible = hidden ? all.slice(hidden) : all;
         const Icon = col.icon;
         return (
           <section
             key={col.key}
-            className={cn(
-              "flex min-h-0 flex-col rounded-xl",
-              stage ? "p-3" : "p-2.5",
-            )}
-            style={{ background: `color-mix(in oklch, var(--col-${col.key}) 55%, transparent)` }}
+            className={cn("flex min-h-0 flex-col rounded-xl", stage ? "p-3" : "p-2.5")}
+            style={{
+              background: `color-mix(in oklch, var(--col-${col.key}) 55%, transparent)`,
+            }}
           >
             <header
               className={cn(
@@ -97,9 +94,7 @@ function NoteCard({ note, stage }: { note: Note; stage: boolean }) {
         stage ? "px-3.5 py-3" : "px-2.5 py-2",
       )}
     >
-      <p className={cn("leading-snug text-pretty", stage ? "text-[21px] font-medium" : "text-[13px]")}>
-        {note.text}
-      </p>
+      <p className={cn("leading-snug text-pretty", stage ? "text-[21px] font-medium" : "text-[13px]")}>{note.text}</p>
       {(note.owner || domain) && (
         <div className={cn("flex flex-wrap items-center gap-1.5", stage ? "mt-2" : "mt-1.5")}>
           {note.owner && (
@@ -108,7 +103,10 @@ function NoteCard({ note, stage }: { note: Note; stage: boolean }) {
                 "inline-flex items-center rounded-full font-medium",
                 stage ? "px-2.5 py-0.5 text-[16px]" : "px-1.5 py-px text-[11px]",
               )}
-              style={{ background: "var(--col-actions)", color: "var(--col-actions-ink)" }}
+              style={{
+                background: "var(--col-actions)",
+                color: "var(--col-actions-ink)",
+              }}
             >
               {note.owner}
             </span>

@@ -11,7 +11,9 @@ export const FAST_MODEL = "claude-haiku-5-5";
 /** Sonnet class: spoken answers, summaries, relay replies. */
 export const STRONG_MODEL = "claude-sonnet-5-5";
 
-export const anthropic = new Anthropic({ apiKey: config.anthropicKey || undefined });
+export const anthropic = new Anthropic({
+  apiKey: config.anthropicKey || undefined,
+});
 
 type Effort = "low" | "medium" | "high";
 
@@ -21,7 +23,13 @@ type Effort = "low" | "medium" | "high";
  */
 export async function structured<S extends z.ZodType>(
   schema: S,
-  opts: { model: string; system?: string; prompt: string; maxTokens?: number; effort?: Effort },
+  opts: {
+    model: string;
+    system?: string;
+    prompt: string;
+    maxTokens?: number;
+    effort?: Effort;
+  },
 ): Promise<z.infer<S> | null> {
   for (let attempt = 1; attempt <= 2; attempt++) {
     try {
@@ -29,7 +37,10 @@ export async function structured<S extends z.ZodType>(
         model: opts.model,
         max_tokens: opts.maxTokens ?? 2000,
         system: opts.system,
-        output_config: { effort: opts.effort ?? "low", format: zodOutputFormat(schema) },
+        output_config: {
+          effort: opts.effort ?? "low",
+          format: zodOutputFormat(schema),
+        },
         messages: [{ role: "user", content: opts.prompt }],
       });
       if (res.stop_reason === "refusal") {

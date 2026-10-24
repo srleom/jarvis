@@ -37,7 +37,10 @@ async function post(path: string, body: unknown, headers?: Record<string, string
   const raw = JSON.stringify(body);
   return fetch(base + path, {
     method: "POST",
-    headers: { "content-type": "application/json", ...(headers ?? signRecallPayload(FAKE_SECRET, id, raw)) },
+    headers: {
+      "content-type": "application/json",
+      ...(headers ?? signRecallPayload(FAKE_SECRET, id, raw)),
+    },
     body: raw,
   });
 }
@@ -45,14 +48,21 @@ const settle = () => new Promise((r) => setTimeout(r, 20));
 
 test("rejects unsigned and wrongly signed requests without running handlers", async () => {
   assert.equal((await post("/recall/webhooks", { event: "bot.done" }, {})).status, 401);
-  const forged = signRecallPayload("whsec_" + Buffer.from("other").toString("base64"), "m", JSON.stringify({ event: "bot.done" }));
+  const forged = signRecallPayload(
+    "whsec_" + Buffer.from("other").toString("base64"),
+    "m",
+    JSON.stringify({ event: "bot.done" }),
+  );
   assert.equal((await post("/recall/webhooks", { event: "bot.done" }, forged)).status, 401);
   await settle();
   assert.deepEqual(dashboard, []);
 });
 
 test("accepts a signed dashboard webhook, acks 2xx and hands it to the handler", async () => {
-  const res = await post("/recall/webhooks", { event: "calendar.sync_events", data: { calendar_id: "c1" } });
+  const res = await post("/recall/webhooks", {
+    event: "calendar.sync_events",
+    data: { calendar_id: "c1" },
+  });
   assert.equal(res.status, 200);
   await settle();
   assert.deepEqual(dashboard, ["calendar.sync_events"]);
@@ -74,8 +84,14 @@ test("transcript finals are deduplicated, partials are not", async () => {
   const final = { event: "transcript.data", data: {} };
   await post("/recall/realtime/", final, undefined, "msg_t1");
   await post("/recall/realtime/", final, undefined, "msg_t1");
-  await post("/recall/realtime/", { event: "transcript.partial_data", data: {} });
-  await post("/recall/realtime/", { event: "transcript.partial_data", data: {} });
+  await post("/recall/realtime/", {
+    event: "transcript.partial_data",
+    data: {},
+  });
+  await post("/recall/realtime/", {
+    event: "transcript.partial_data",
+    data: {},
+  });
   await settle();
   assert.deepEqual(realtime, ["transcript.data", "transcript.partial_data", "transcript.partial_data"]);
 });
@@ -91,6 +107,10 @@ test("asks Recall to retry when the idempotency ledger is unavailable", async ()
 
 test("rejects a body that is signed but not JSON", async () => {
   const raw = "not json";
-  const res = await fetch(base + "/recall/webhooks", { method: "POST", headers: signRecallPayload(FAKE_SECRET, "msg_bad", raw), body: raw });
+  const res = await fetch(base + "/recall/webhooks", {
+    method: "POST",
+    headers: signRecallPayload(FAKE_SECRET, "msg_bad", raw),
+    body: raw,
+  });
   assert.equal(res.status, 400);
 });

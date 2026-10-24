@@ -1,0 +1,13 @@
+node_modules
+.next
+.convex
+.vercel
+web/convex/_generated
+web/pnpm-lock.yaml
+orchestrator/pnpm-lock.yaml
+pnpm-lock.yaml
+*.tsbuildinfo
+web/.agents
+web/.claude
+web/skills-lock.json
+web/components/ui

@@ -1,16 +1,7 @@
 "use client";
 
 import { useAction, useMutation, useQuery } from "convex/react";
-import {
-  AlertCircle,
-  FileText,
-  Loader2,
-  NotebookText,
-  RotateCw,
-  Search,
-  Trash2,
-  Upload,
-} from "lucide-react";
+import { AlertCircle, FileText, Loader2, NotebookText, RotateCw, Search, Trash2, Upload } from "lucide-react";
 import Link from "next/link";
 import { useRef, useState } from "react";
 import { toast } from "sonner";
@@ -93,7 +84,11 @@ function MemorySearch({ agentId, agentName }: { agentId: Id<"agents">; agentName
       {hits && hits.length > 0 && (
         <ol className="mt-4 grid gap-2">
           {hits.map((h, i) => (
-            <li key={h.id} className="animate-rise rounded-xl border bg-card p-4" style={{ animationDelay: `${i * 40}ms` }}>
+            <li
+              key={h.id}
+              className="animate-rise rounded-xl border bg-card p-4"
+              style={{ animationDelay: `${i * 40}ms` }}
+            >
               <div className="mb-1.5 flex items-center gap-2 text-xs">
                 <SourceChip source={h.source} />
                 <span className="truncate text-muted-foreground">{h.label}</span>
@@ -120,7 +115,10 @@ function SourceChip({ source }: { source: MemoryHit["source"] }) {
   return (
     <span
       className="rounded-full px-2 py-0.5 font-medium"
-      style={{ background: `var(--col-${s.col})`, color: `var(--col-${s.col}-ink)` }}
+      style={{
+        background: `var(--col-${s.col})`,
+        color: `var(--col-${s.col}-ink)`,
+      }}
     >
       {s.label}
     </span>
@@ -153,7 +151,9 @@ function Documents({ agentId }: { agentId: Id<"agents"> }) {
           body: file,
         });
         if (!res.ok) throw new Error("Upload failed");
-        const { storageId } = (await res.json()) as { storageId: Id<"_storage"> };
+        const { storageId } = (await res.json()) as {
+          storageId: Id<"_storage">;
+        };
         await save({
           agentId,
           storageId,
@@ -276,7 +276,10 @@ function PastNotes({ agentId }: { agentId: Id<"agents"> }) {
   const notes = useQuery(api.memory.pastNotes, { agentId });
   return (
     <section>
-      <SectionHeader title="Past meeting notes" description="Notes from earlier calls are added to memory automatically." />
+      <SectionHeader
+        title="Past meeting notes"
+        description="Notes from earlier calls are added to memory automatically."
+      />
       {notes === undefined ? (
         <Skeleton className="h-32 rounded-xl" />
       ) : notes.length === 0 ? (

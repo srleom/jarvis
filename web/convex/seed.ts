@@ -1,10 +1,7 @@
 // Demo data for local development: `npx convex run seed:demo`
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
-import {
-  DEFAULT_BEHAVIOUR_INSTRUCTIONS,
-  DEFAULT_POST_MEETING_INSTRUCTIONS,
-} from "./lib/constants";
+import { DEFAULT_BEHAVIOUR_INSTRUCTIONS, DEFAULT_POST_MEETING_INSTRUCTIONS } from "./lib/constants";
 
 export const demo = internalMutation({
   args: {},
@@ -20,7 +17,9 @@ export const demo = internalMutation({
       meetingCount: 0,
       createdAt: now - 3 * 86400_000,
     });
-    await ctx.db.patch("agents", agentId, { mossIndexName: `jarvis-${agentId}` });
+    await ctx.db.patch("agents", agentId, {
+      mossIndexName: `jarvis-${agentId}`,
+    });
 
     const members: [string, string][] = [
       ["Ava Chen", "U0DEMOAVA"],
@@ -49,7 +48,10 @@ export const demo = internalMutation({
       ["Sam Rivera", "Our budget for the venue is ten thousand dollars, max."],
       ["Ava Chen", "Let's go with the Palace of Fine Arts if it's under 10k."],
       ["Priya Nair", "Hey Jarvis, how much does it cost to rent the Palace of Fine Arts, and does it fit our budget?"],
-      ["Jarvis", "The Palace of Fine Arts lists full-day rentals from about $8,500, so it fits your $10k budget with some room for AV."],
+      [
+        "Jarvis",
+        "The Palace of Fine Arts lists full-day rentals from about $8,500, so it fits your $10k budget with some room for AV.",
+      ],
       ["Sam Rivera", "Great, then that's decided. Palace of Fine Arts."],
       ["Ava Chen", "Sam, can you email them to hold the date by Friday?"],
       ["Sam Rivera", "Yep, I'll do it tomorrow."],
@@ -59,16 +61,17 @@ export const demo = internalMutation({
     ];
     let t = 12;
     for (const [speaker, text] of lines) {
-      await ctx.db.insert("transcriptSegments", { meetingId, speaker, text, startTime: t, isFinal: true });
+      await ctx.db.insert("transcriptSegments", {
+        meetingId,
+        speaker,
+        text,
+        startTime: t,
+        isFinal: true,
+      });
       t += 40 + Math.round(Math.random() * 50);
     }
 
-    const notes: [
-      "topics" | "decisions" | "questions" | "actions" | "answers",
-      string,
-      string?,
-      string?,
-    ][] = [
+    const notes: ["topics" | "decisions" | "questions" | "actions" | "answers", string, string?, string?][] = [
       ["topics", "Spring hackathon venue"],
       ["topics", "Setup schedule"],
       ["topics", "Sponsor outreach"],
@@ -77,10 +80,23 @@ export const demo = internalMutation({
       ["questions", "Do we need overnight security?"],
       ["actions", "Email venue to hold the date by Friday", "Sam"],
       ["actions", "Draft the sponsor deck", "Priya"],
-      ["answers", "Palace of Fine Arts from ~$8,500/day, fits budget", undefined, "https://palaceoffinearts.com/rentals"],
+      [
+        "answers",
+        "Palace of Fine Arts from ~$8,500/day, fits budget",
+        undefined,
+        "https://palaceoffinearts.com/rentals",
+      ],
     ];
     for (const [column, text, owner, sourceUrl] of notes) {
-      await ctx.db.insert("boardNotes", { meetingId, column, text, owner, sourceUrl, createdAt: now, updatedAt: now });
+      await ctx.db.insert("boardNotes", {
+        meetingId,
+        column,
+        text,
+        owner,
+        sourceUrl,
+        createdAt: now,
+        updatedAt: now,
+      });
     }
 
     await ctx.db.insert("answers", {
@@ -91,8 +107,18 @@ export const demo = internalMutation({
         "The Palace of Fine Arts lists full-day rentals from about $8,500, so it fits your $10k budget with some room for AV.",
       sourceUrl: "https://palaceoffinearts.com/rentals",
       toolLog: [
-        { tool: "web_search", input: "Palace of Fine Arts rental cost", status: "ok", ms: 840 },
-        { tool: "read_page", input: "https://palaceoffinearts.com/rentals", status: "ok", ms: 2100 },
+        {
+          tool: "web_search",
+          input: "Palace of Fine Arts rental cost",
+          status: "ok",
+          ms: 840,
+        },
+        {
+          tool: "read_page",
+          input: "https://palaceoffinearts.com/rentals",
+          status: "ok",
+          ms: 2100,
+        },
       ],
       createdAt: startedAt + 4 * 60_000,
     });
@@ -105,7 +131,8 @@ export const demo = internalMutation({
       preview: "Ben has a message about setup time.",
       status: "answered",
       teamAnswer: "Tell Ben we like it, but the venue only opens at 3.",
-      slackReply: "The team likes the 4pm idea. One catch: \"the venue only opens at 3\", so setup can start any time after that.",
+      slackReply:
+        'The team likes the 4pm idea. One catch: "the venue only opens at 3", so setup can start any time after that.',
       createdAt: startedAt + 9 * 60_000,
       updatedAt: startedAt + 10 * 60_000,
     });
@@ -137,7 +164,10 @@ The team picked the Palace of Fine Arts for the spring hackathon, within the $10
       createdAt: startedAt + 35 * 60_000,
     });
 
-    await ctx.db.patch("agents", agentId, { memberCount: members.length, meetingCount: 1 });
+    await ctx.db.patch("agents", agentId, {
+      memberCount: members.length,
+      meetingCount: 1,
+    });
     return agentId;
   },
 });
@@ -160,7 +190,9 @@ export const liveMeeting = internalMutation({
       startedAt: Date.now(),
     });
     await ctx.db.insert("avatarState", { meetingId, state: "listening" });
-    await ctx.db.patch("agents", agentId, { meetingCount: agent.meetingCount + 1 });
+    await ctx.db.patch("agents", agentId, {
+      meetingCount: agent.meetingCount + 1,
+    });
     return meetingId;
   },
 });

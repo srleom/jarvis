@@ -25,7 +25,11 @@ export async function synthesize(text: string, { cacheable = false } = {}): Prom
       transcript: text,
       voice: { id: config.cartesia.voiceId },
       language: "en",
-      output_format: { container: "wav", encoding: "pcm_s16le", sample_rate: SAMPLE_RATE },
+      output_format: {
+        container: "wav",
+        encoding: "pcm_s16le",
+        sample_rate: SAMPLE_RATE,
+      },
     }),
   });
   if (!res.ok) {

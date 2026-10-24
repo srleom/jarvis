@@ -42,7 +42,9 @@ export const send = mutation({
       startedAt: Date.now(),
     });
     await ctx.db.insert("avatarState", { meetingId, state: "listening" });
-    await ctx.db.patch("agents", agent._id, { meetingCount: agent.meetingCount + 1 });
+    await ctx.db.patch("agents", agent._id, {
+      meetingCount: agent.meetingCount + 1,
+    });
     await ctx.scheduler.runAfter(0, internal.meetings.startBot, { meetingId });
     return meetingId;
   },
@@ -76,8 +78,13 @@ export const markFailed = internalMutation({
 });
 
 async function cancelScheduledMeeting(ctx: MutationCtx, meeting: Doc<"meetings">) {
-  await ctx.db.patch("meetings", meeting._id, { status: "cancelled", endedAt: Date.now() });
-  await ctx.scheduler.runAfter(0, internal.meetings.unscheduleBot, { meetingId: meeting._id });
+  await ctx.db.patch("meetings", meeting._id, {
+    status: "cancelled",
+    endedAt: Date.now(),
+  });
+  await ctx.scheduler.runAfter(0, internal.meetings.unscheduleBot, {
+    meetingId: meeting._id,
+  });
 }
 
 /** Stops a calendar meeting from happening. Kept as "cancelled" so the next sync doesn't re-add it. */
@@ -143,7 +150,10 @@ export const finish = internalMutation({
   handler: async (ctx, { meetingId }) => {
     const meeting = await ctx.db.get("meetings", meetingId);
     if (!meeting || meeting.status === "ended" || meeting.status === "failed" || meeting.status === "cancelled") return;
-    await ctx.db.patch("meetings", meetingId, { status: "ended", endedAt: Date.now() });
+    await ctx.db.patch("meetings", meetingId, {
+      status: "ended",
+      endedAt: Date.now(),
+    });
     await ctx.scheduler.runAfter(0, internal.notes.generate, { meetingId });
   },
 });
@@ -161,7 +171,9 @@ export const remove = mutation({
     }
     const agent = await ctx.db.get("agents", meeting.agentId);
     await ctx.db.delete("meetings", meetingId);
-    await ctx.scheduler.runAfter(0, internal.cleanup.meetingData, { meetingId });
+    await ctx.scheduler.runAfter(0, internal.cleanup.meetingData, {
+      meetingId,
+    });
     if (agent) {
       await ctx.db.patch("agents", agent._id, {
         meetingCount: Math.max(0, agent.meetingCount - 1),

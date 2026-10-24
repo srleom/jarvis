@@ -89,7 +89,12 @@ function useClock() {
   const [now, setNow] = useState<string>("");
   useEffect(() => {
     const update = () =>
-      setNow(new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }));
+      setNow(
+        new Date().toLocaleTimeString("en-US", {
+          hour: "numeric",
+          minute: "2-digit",
+        }),
+      );
     update();
     const id = setInterval(update, 10_000);
     return () => clearInterval(id);

@@ -40,7 +40,9 @@ export function verifyRecallRequest(args: {
   }
 
   const key = Buffer.from(secret.slice("whsec_".length), "base64");
-  const expected = createHmac("sha256", key).update(`${id}.${timestamp}.${payload ?? ""}`).digest();
+  const expected = createHmac("sha256", key)
+    .update(`${id}.${timestamp}.${payload ?? ""}`)
+    .digest();
   for (const versioned of signatures.split(" ")) {
     const [version, sig] = versioned.split(",");
     if (version !== "v1" || !sig) continue;
@@ -51,8 +53,17 @@ export function verifyRecallRequest(args: {
 }
 
 /** Signs a payload the way Recall does. Used by the simulator and tests. */
-export function signRecallPayload(secret: string, id: string, payload: string, timestamp = Math.floor(Date.now() / 1000)) {
+export function signRecallPayload(
+  secret: string,
+  id: string,
+  payload: string,
+  timestamp = Math.floor(Date.now() / 1000),
+) {
   const key = Buffer.from(secret.slice("whsec_".length), "base64");
   const sig = createHmac("sha256", key).update(`${id}.${timestamp}.${payload}`).digest("base64");
-  return { "webhook-id": id, "webhook-timestamp": String(timestamp), "webhook-signature": `v1,${sig}` };
+  return {
+    "webhook-id": id,
+    "webhook-timestamp": String(timestamp),
+    "webhook-signature": `v1,${sig}`,
+  };
 }

@@ -4,7 +4,7 @@ import { VerificationError, verifyRecallRequest } from "./verify.js";
 
 const log = logger("webhooks");
 
-export type RecallEvent = { event: string; data: Record<string, any> };
+export type RecallEvent = { event: string; data: unknown };
 
 export type WebhookDeps = {
   /** RECALL_WEBHOOK_VERIFICATION_SECRET. Requests are rejected while it is unset. */
@@ -37,7 +37,12 @@ export function createWebhookRouter(deps: WebhookDeps): Router {
       const raw = Buffer.isBuffer(req.body) ? req.body.toString("utf8") : "";
       let messageId: string;
       try {
-        messageId = verifyRecallRequest({ secret: deps.secret, headers: req.headers, payload: raw, now: deps.now?.() });
+        messageId = verifyRecallRequest({
+          secret: deps.secret,
+          headers: req.headers,
+          payload: raw,
+          now: deps.now?.(),
+        });
       } catch (e) {
         log.warn(`${kind} request rejected: ${e instanceof VerificationError ? e.message : "verification failed"}`);
         res.status(401).json({ error: "Unauthorized" });
@@ -45,7 +50,7 @@ export function createWebhookRouter(deps: WebhookDeps): Router {
       }
       let evt: RecallEvent;
       try {
-        evt = JSON.parse(raw);
+        evt = JSON.parse(raw) as RecallEvent;
         if (typeof evt?.event !== "string") throw new Error("no event");
       } catch {
         res.status(400).json({ error: "Invalid payload" });
@@ -66,8 +71,8 @@ export function createWebhookRouter(deps: WebhookDeps): Router {
       }
 
       res.status(200).json({ ok: true });
-      const handler = kind === "realtime" ? deps.onRealtime : deps.onDashboard;
-      void handler(evt).catch((e) => log.error(`${evt.event} failed: ${(e as Error).message}`));
+      const dispatched = kind === "realtime" ? deps.onRealtime(evt) : deps.onDashboard(evt);
+      void dispatched.catch((e) => log.error(`${evt.event} failed: ${(e as Error).message}`));
     };
   }
 

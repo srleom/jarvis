@@ -34,11 +34,7 @@ export const relayStatus = v.union(
   v.literal("expired"),
 );
 
-export const documentStatus = v.union(
-  v.literal("indexing"),
-  v.literal("ready"),
-  v.literal("failed"),
-);
+export const documentStatus = v.union(v.literal("indexing"), v.literal("ready"), v.literal("failed"));
 
 export const toolLogEntry = v.object({
   tool: v.string(),

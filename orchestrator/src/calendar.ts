@@ -48,11 +48,18 @@ export type CalendarStore = {
 export type CalendarSyncDeps = {
   recall: Pick<RecallClient, "listCalendarEvents" | "scheduleCalendarEventBot" | "removeCalendarEventBot">;
   store: CalendarStore;
-  config: Pick<Config, "publicUrl" | "botPageBaseUrl"> & { recall: Pick<Config["recall"], "outputMode" | "calendarOptIn"> };
+  config: Pick<Config, "publicUrl" | "botPageBaseUrl"> & {
+    recall: Pick<Config["recall"], "outputMode" | "calendarOptIn">;
+  };
   now?: () => number;
 };
 
-export type SyncResult = { scheduled: number; cancelled: number; skipped: Record<string, number>; failed: number };
+export type SyncResult = {
+  scheduled: number;
+  cancelled: number;
+  skipped: Record<string, number>;
+  failed: number;
+};
 
 /** One bot per start time and meeting link, shared across every calendar in the workspace. */
 export function deduplicationKey(event: Pick<CalendarEvent, "start_time" | "meeting_url">) {
@@ -64,7 +71,12 @@ export function createCalendarSync(deps: CalendarSyncDeps) {
   const chains = new Map<string, Promise<unknown>>();
 
   async function run(recallCalendarId: string): Promise<SyncResult | null> {
-    const result: SyncResult = { scheduled: 0, cancelled: 0, skipped: {}, failed: 0 };
+    const result: SyncResult = {
+      scheduled: 0,
+      cancelled: 0,
+      skipped: {},
+      failed: 0,
+    };
     const link = await store.getLink(recallCalendarId);
     if (!link) {
       log.warn("calendar event received for a calendar that isn't linked to an agent");
@@ -78,7 +90,10 @@ export function createCalendarSync(deps: CalendarSyncDeps) {
     let newest = link.syncedThrough;
 
     for (const event of events) {
-      const decision = decide(event, { now, optIn: deps.config.recall.calendarOptIn });
+      const decision = decide(event, {
+        now,
+        optIn: deps.config.recall.calendarOptIn,
+      });
       try {
         if (decision.record) {
           const intent = await store.schedule({
@@ -97,7 +112,10 @@ export function createCalendarSync(deps: CalendarSyncDeps) {
               const scheduled = await recall.scheduleCalendarEventBot(
                 event.id,
                 deduplicationKey(event),
-                buildBotConfig(deps.config, { meetingId: intent.meetingId, botName }),
+                buildBotConfig(deps.config, {
+                  meetingId: intent.meetingId,
+                  botName,
+                }),
               );
               const botId = scheduled.bots?.at(-1)?.bot_id;
               if (botId) await store.recordBot(intent.meetingId, botId);
@@ -138,7 +156,9 @@ export function createCalendarSync(deps: CalendarSyncDeps) {
     const prev = chains.get(recallCalendarId) ?? Promise.resolve();
     const next = prev.catch(() => undefined).then(() => run(recallCalendarId));
     chains.set(recallCalendarId, next);
-    void next.finally(() => chains.get(recallCalendarId) === next && chains.delete(recallCalendarId)).catch(() => undefined);
+    void next
+      .finally(() => chains.get(recallCalendarId) === next && chains.delete(recallCalendarId))
+      .catch(() => undefined);
     return next;
   };
 }

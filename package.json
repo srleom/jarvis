@@ -1,0 +1,16 @@
+{
+  "name": "jarvis",
+  "private": true,
+  "packageManager": "pnpm@10.29.2",
+  "devDependencies": {
+    "prettier": "^3.9.10"
+  },
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "pnpm -C orchestrator typecheck && pnpm -C web typecheck",
+    "lint": "pnpm -C orchestrator lint && pnpm -C web lint",
+    "check": "pnpm format:check && pnpm typecheck && pnpm lint",
+    "fix": "pnpm format && pnpm -C orchestrator lint --fix && pnpm -C web lint --fix"
+  }
+}

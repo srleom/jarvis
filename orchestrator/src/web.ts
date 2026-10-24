@@ -6,7 +6,12 @@ const log = logger("brightdata");
 export type SearchResult = { title: string; url: string; snippet: string };
 
 /** Every web call is logged with query, status and time taken, for the demo and README. */
-export type WebCallLog = { tool: string; input: string; status: string; ms: number };
+export type WebCallLog = {
+  tool: string;
+  input: string;
+  status: string;
+  ms: number;
+};
 
 async function brightRequest(zone: string, url: string, extra: Record<string, unknown>, timeoutMs: number) {
   if (!config.brightData.apiKey || !zone) throw new Error("Bright Data isn't configured.");
@@ -24,10 +29,19 @@ async function brightRequest(zone: string, url: string, extra: Record<string, un
   return body;
 }
 
-type SerpOrganic = { title?: string; link?: string; url?: string; description?: string; snippet?: string };
+type SerpOrganic = {
+  title?: string;
+  link?: string;
+  url?: string;
+  description?: string;
+  snippet?: string;
+};
 
 /** Google results through the Bright Data SERP API (parsed JSON via brd_json=1). */
-export async function webSearch(query: string, timeoutMs: number): Promise<{ results: SearchResult[]; log: WebCallLog }> {
+export async function webSearch(
+  query: string,
+  timeoutMs: number,
+): Promise<{ results: SearchResult[]; log: WebCallLog }> {
   const started = Date.now();
   const target = `https://www.google.com/search?q=${encodeURIComponent(query)}&hl=en&gl=us&brd_json=1`;
   try {
@@ -49,7 +63,10 @@ export async function webSearch(query: string, timeoutMs: number): Promise<{ res
     const ms = Date.now() - started;
     const status = (e as Error).name === "TimeoutError" ? "timeout" : "error";
     log.warn(`web_search "${query}" → ${status} in ${ms}ms: ${(e as Error).message}`);
-    return { results: [], log: { tool: "web_search", input: query, status, ms } };
+    return {
+      results: [],
+      log: { tool: "web_search", input: query, status, ms },
+    };
   }
 }
 
@@ -58,11 +75,17 @@ export async function readPage(url: string, timeoutMs: number): Promise<{ text: 
   const started = Date.now();
   try {
     const raw = await brightRequest(config.brightData.unlockerZone, url, { data_format: "markdown" }, timeoutMs);
-    const text = raw.replace(/\n{3,}/g, "\n\n").trim().slice(0, 4000);
+    const text = raw
+      .replace(/\n{3,}/g, "\n\n")
+      .trim()
+      .slice(0, 4000);
     const ms = Date.now() - started;
     const status = text ? "ok" : "empty";
     log.info(`read_page ${url} → ${status} in ${ms}ms`);
-    return { text: text || null, log: { tool: "read_page", input: url, status, ms } };
+    return {
+      text: text || null,
+      log: { tool: "read_page", input: url, status, ms },
+    };
   } catch (e) {
     const ms = Date.now() - started;
     const status = (e as Error).name === "TimeoutError" ? "timeout" : "blocked";

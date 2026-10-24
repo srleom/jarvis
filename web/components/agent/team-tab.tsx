@@ -7,14 +7,7 @@ import { toast } from "sonner";
 import { EmptyState, SectionHeader } from "@/components/agent/section";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
 import {
   Dialog,
   DialogContent,
@@ -32,7 +25,12 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { errorMessage, initials } from "@/lib/format";
 
-type SlackUser = { id: string; name: string; handle: string; avatarUrl?: string };
+type SlackUser = {
+  id: string;
+  name: string;
+  handle: string;
+  avatarUrl?: string;
+};
 
 export function TeamTab({ agentId, agentName }: { agentId: Id<"agents">; agentName: string }) {
   const members = useQuery(api.team.list, { agentId });
@@ -46,13 +44,7 @@ export function TeamTab({ agentId, agentName }: { agentId: Id<"agents">; agentNa
       <SectionHeader
         title="Team"
         description={`Only these people can DM ${agentName} on Slack for a catch-up, a question or a message to the call.`}
-        action={
-          <AddMemberButton
-            agentId={agentId}
-            existing={existing}
-            onManual={() => setManualOpen(true)}
-          />
-        }
+        action={<AddMemberButton agentId={agentId} existing={existing} onManual={() => setManualOpen(true)} />}
       />
 
       {members === undefined ? (
@@ -136,7 +128,12 @@ function AddMemberButton({
   async function pick(u: SlackUser) {
     setAdding(u.id);
     try {
-      await add({ agentId, name: u.name, slackUserId: u.id, avatarUrl: u.avatarUrl });
+      await add({
+        agentId,
+        name: u.name,
+        slackUserId: u.id,
+        avatarUrl: u.avatarUrl,
+      });
       toast.success(`Added ${u.name}`);
     } catch (e) {
       toast.error(errorMessage(e));

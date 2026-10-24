@@ -68,7 +68,10 @@ export class MeetingSession {
   private mossChunk = 0;
 
   private wakeFrom: number | null = null;
-  private awaitingQuestion: { participantId: number; timer: NodeJS.Timeout } | null = null;
+  private awaitingQuestion: {
+    participantId: number;
+    timer: NodeJS.Timeout;
+  } | null = null;
 
   private relayQueue: RelayItem[] = [];
   private relay: RelayItem | null = null;
@@ -114,7 +117,11 @@ export class MeetingSession {
   async goLive() {
     if (this.ended || this.introduced) return;
     this.introduced = true;
-    await convex.mutation(api.orchestrator.setStatus, { secret, meetingId: this.meetingId, status: "live" });
+    await convex.mutation(api.orchestrator.setStatus, {
+      secret,
+      meetingId: this.meetingId,
+      status: "live",
+    });
     this.startTimers();
     this.log.info("live");
     // Give the bot page a moment to connect before the spoken intro.
@@ -150,7 +157,10 @@ export class MeetingSession {
   }
 
   private async refreshAgent() {
-    const ctx = await convex.query(api.orchestrator.meetingContext, { secret, meetingId: this.meetingId });
+    const ctx = await convex.query(api.orchestrator.meetingContext, {
+      secret,
+      meetingId: this.meetingId,
+    });
     if (ctx) this.agent = ctx.agent;
   }
 
@@ -158,7 +168,12 @@ export class MeetingSession {
 
   private async setAvatar(state: AvatarState, preview?: string) {
     try {
-      await convex.mutation(api.orchestrator.setAvatar, { secret, meetingId: this.meetingId, state, preview });
+      await convex.mutation(api.orchestrator.setAvatar, {
+        secret,
+        meetingId: this.meetingId,
+        state,
+        preview,
+      });
     } catch (e) {
       this.log.warn(`avatar update failed: ${(e as Error).message}`);
     }
@@ -218,9 +233,7 @@ export class MeetingSession {
     const name = normalize(this.name);
     const norm = normalize(text);
     return (
-      norm.includes(`${phrase} ${name}`) ||
-      norm.includes(`${name} ${phrase}`) ||
-      norm.includes(`${phrase} hey ${name}`)
+      norm.includes(`${phrase} ${name}`) || norm.includes(`${name} ${phrase}`) || norm.includes(`${phrase} hey ${name}`)
     );
   }
 
@@ -235,14 +248,20 @@ export class MeetingSession {
     }
   }
 
-  async onFinal(participantId: number, speaker: string, text: string, startTime: number) {
+  onFinal(participantId: number, speaker: string, text: string, startTime: number) {
     if (this.ended) return;
     this.lastRelative = Math.max(this.lastRelative, startTime);
     if (speaker === this.name) return; // our own voice, already recorded when we spoke
     const seg: Segment = { speaker, text, t: startTime, at: Date.now() };
     this.finals.push(seg);
     void convex
-      .mutation(api.orchestrator.addTranscript, { secret, meetingId: this.meetingId, speaker, text, startTime })
+      .mutation(api.orchestrator.addTranscript, {
+        secret,
+        meetingId: this.meetingId,
+        speaker,
+        text,
+        startTime,
+      })
       .catch((e) => this.log.warn(`transcript write failed: ${(e as Error).message}`));
 
     if (this.relayPhase === "awaiting_answer") {
@@ -292,7 +311,7 @@ export class MeetingSession {
     }
   }
 
-  async onChat(sender: string, text: string) {
+  onChat(sender: string, text: string) {
     if (this.ended) return;
     const t = text.trim().toLowerCase();
     if (this.relayPhase === "hand_raised") {
@@ -318,7 +337,10 @@ export class MeetingSession {
     this.log.info(`question from ${askedBy}: ${question}`);
     void this.setAvatar("thinking");
     try {
-      const filler = this.speak("Let me check.", { cacheable: true, record: false });
+      const filler = this.speak("Let me check.", {
+        cacheable: true,
+        record: false,
+      });
       await this.refreshAgent().catch(() => {});
       const answer = await answerQuestion({
         agentName: this.name,
@@ -359,14 +381,26 @@ export class MeetingSession {
         .slice(this.boardCursor, end)
         .map((s) => `${s.speaker}: ${s.text}`)
         .join("\n");
-      const board = await convex.query(api.orchestrator.board, { secret, meetingId: this.meetingId });
+      const board = await convex.query(api.orchestrator.board, {
+        secret,
+        meetingId: this.meetingId,
+      });
       const ops = await proposeBoardOps(
-        board.map((n) => ({ id: n._id, column: n.column, text: n.text, owner: n.owner })),
+        board.map((n) => ({
+          id: n._id,
+          column: n.column,
+          text: n.text,
+          owner: n.owner,
+        })),
         lines,
         this.name,
       );
       if (ops.length) {
-        await convex.mutation(api.orchestrator.applyBoardOps, { secret, meetingId: this.meetingId, ops });
+        await convex.mutation(api.orchestrator.applyBoardOps, {
+          secret,
+          meetingId: this.meetingId,
+          ops,
+        });
         this.log.info(`board: ${ops.map((o) => o.op).join(", ")}`);
       }
       this.boardCursor = end;
@@ -437,7 +471,11 @@ export class MeetingSession {
     this.relay = next;
     this.relayPhase = "hand_raised";
     this.log.info(`hand raised: ${next.preview}`);
-    void convex.mutation(api.orchestrator.updateRelay, { secret, relayId: next.relayId, status: "hand_raised" });
+    void convex.mutation(api.orchestrator.updateRelay, {
+      secret,
+      relayId: next.relayId,
+      status: "hand_raised",
+    });
     void this.setAvatar("hand_raised", next.preview);
     if (this.botId) {
       void recall.sendChat(
@@ -458,13 +496,21 @@ export class MeetingSession {
     if (this.relayPhase !== "hand_raised" || !r) return;
     this.relayPhase = "speaking";
     this.log.info("relay granted");
-    await convex.mutation(api.orchestrator.updateRelay, { secret, relayId: r.relayId, status: "speaking" });
+    await convex.mutation(api.orchestrator.updateRelay, {
+      secret,
+      relayId: r.relayId,
+      status: "speaking",
+    });
     await this.speak(`${firstName(r.fromName)} says: ${r.message}`);
 
     this.relayPhase = "awaiting_answer";
     this.relayAnswer = [];
     this.relayAnswerStarted = Date.now();
-    await convex.mutation(api.orchestrator.updateRelay, { secret, relayId: r.relayId, status: "awaiting_answer" });
+    await convex.mutation(api.orchestrator.updateRelay, {
+      secret,
+      relayId: r.relayId,
+      status: "awaiting_answer",
+    });
     await this.setAvatar("listening");
 
     const check = setInterval(() => {
@@ -486,9 +532,16 @@ export class MeetingSession {
     this.relay = null;
 
     if (!said.trim()) {
-      const reply = this.prefix("I read your message to the team, but nobody responded yet. I'll let you know if they do, or you can catch them when you join.");
+      const reply = this.prefix(
+        "I read your message to the team, but nobody responded yet. I'll let you know if they do, or you can catch them when you join.",
+      );
       await sendDM(r.fromSlackUserId, reply);
-      await convex.mutation(api.orchestrator.updateRelay, { secret, relayId: r.relayId, status: "expired", slackReply: reply });
+      await convex.mutation(api.orchestrator.updateRelay, {
+        secret,
+        relayId: r.relayId,
+        status: "expired",
+        slackReply: reply,
+      });
     } else {
       const text =
         (await complete({
@@ -502,7 +555,11 @@ ${said}
 Write a short Slack reply to ${firstName(r.fromName)} (one to three sentences) in your own words, quoting the key point in "double quotes". If the team didn't really answer, say so honestly. Plain text only.`,
           maxTokens: 600,
           effort: "low",
-        })) ?? `Here's what the team said: "${this.relayAnswer.map((s) => s.text).join(" ").slice(0, 400)}"`;
+        })) ??
+        `Here's what the team said: "${this.relayAnswer
+          .map((s) => s.text)
+          .join(" ")
+          .slice(0, 400)}"`;
       const reply = this.prefix(text);
       await sendDM(r.fromSlackUserId, reply);
       await convex.mutation(api.orchestrator.updateRelay, {

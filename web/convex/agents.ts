@@ -2,27 +2,17 @@ import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type QueryCtx } from "./_generated/server";
-import {
-  DEFAULT_BEHAVIOUR_INSTRUCTIONS,
-  DEFAULT_POST_MEETING_INSTRUCTIONS,
-} from "./lib/constants";
+import { DEFAULT_BEHAVIOUR_INSTRUCTIONS, DEFAULT_POST_MEETING_INSTRUCTIONS } from "./lib/constants";
 
-export async function getActiveMeeting(
-  ctx: QueryCtx,
-  agentId: Id<"agents">,
-): Promise<Doc<"meetings"> | null> {
+export async function getActiveMeeting(ctx: QueryCtx, agentId: Id<"agents">): Promise<Doc<"meetings"> | null> {
   const live = await ctx.db
     .query("meetings")
-    .withIndex("by_agent_and_status", (q) =>
-      q.eq("agentId", agentId).eq("status", "live"),
-    )
+    .withIndex("by_agent_and_status", (q) => q.eq("agentId", agentId).eq("status", "live"))
     .first();
   if (live) return live;
   return await ctx.db
     .query("meetings")
-    .withIndex("by_agent_and_status", (q) =>
-      q.eq("agentId", agentId).eq("status", "joining"),
-    )
+    .withIndex("by_agent_and_status", (q) => q.eq("agentId", agentId).eq("status", "joining"))
     .first();
 }
 
@@ -35,9 +25,7 @@ export const list = query({
         const active = await getActiveMeeting(ctx, agent._id);
         return {
           ...agent,
-          activeMeeting: active
-            ? { _id: active._id, status: active.status }
-            : null,
+          activeMeeting: active ? { _id: active._id, status: active.status } : null,
         };
       }),
     );
@@ -52,9 +40,7 @@ export const get = query({
     const active = await getActiveMeeting(ctx, agentId);
     return {
       ...agent,
-      activeMeeting: active
-        ? { _id: active._id, status: active.status, meetUrl: active.meetUrl }
-        : null,
+      activeMeeting: active ? { _id: active._id, status: active.status, meetUrl: active.meetUrl } : null,
     };
   },
 });
@@ -80,7 +66,9 @@ export const create = mutation({
       meetingCount: 0,
       createdAt: Date.now(),
     });
-    await ctx.db.patch("agents", agentId, { mossIndexName: `jarvis-${agentId}` });
+    await ctx.db.patch("agents", agentId, {
+      mossIndexName: `jarvis-${agentId}`,
+    });
     return agentId;
   },
 });
@@ -98,13 +86,10 @@ export const update = mutation({
     if (!agent) throw new ConvexError("Agent not found.");
     const patch: Partial<Doc<"agents">> = {};
     if (fields.name !== undefined) patch.name = cleanName(fields.name);
-    if (fields.slackChannelId !== undefined)
-      patch.slackChannelId = fields.slackChannelId.trim();
-    if (fields.behaviourInstructions !== undefined)
-      patch.behaviourInstructions = fields.behaviourInstructions.trim();
+    if (fields.slackChannelId !== undefined) patch.slackChannelId = fields.slackChannelId.trim();
+    if (fields.behaviourInstructions !== undefined) patch.behaviourInstructions = fields.behaviourInstructions.trim();
     if (fields.postMeetingInstructions !== undefined)
-      patch.postMeetingInstructions =
-        fields.postMeetingInstructions.trim() || DEFAULT_POST_MEETING_INSTRUCTIONS;
+      patch.postMeetingInstructions = fields.postMeetingInstructions.trim() || DEFAULT_POST_MEETING_INSTRUCTIONS;
     await ctx.db.patch("agents", agentId, patch);
   },
 });

@@ -39,7 +39,11 @@ async function postToSlack(channel: string, text: string) {
     },
     body: JSON.stringify({ channel, text, unfurl_links: false, mrkdwn: true }),
   });
-  const data = (await res.json()) as { ok: boolean; ts?: string; error?: string };
+  const data = (await res.json()) as {
+    ok: boolean;
+    ts?: string;
+    error?: string;
+  };
   if (!data.ok) {
     console.error("Slack post failed:", data.error);
     return undefined;
@@ -70,14 +74,15 @@ export const generate = internalAction({
     } else if (!env.ANTHROPIC_API_KEY) {
       markdown = "_Notes couldn't be generated: ANTHROPIC_API_KEY isn't set on the Convex deployment._";
     } else {
-      const transcriptText = transcript
-        .map((s) => `[${fmtTime(s.startTime)}] ${s.speaker}: ${s.text}`)
-        .join("\n");
+      const transcriptText = transcript.map((s) => `[${fmtTime(s.startTime)}] ${s.speaker}: ${s.text}`).join("\n");
       const boardText = board
         .map((n) => `- (${n.column}) ${n.text}${n.owner ? ` [owner: ${n.owner}]` : ""}`)
         .join("\n");
       const answersText = answers
-        .map((a) => `- ${a.askedBy} asked: ${a.question}\n  Answer: ${a.spokenAnswer}${a.sourceUrl ? `\n  Source: ${a.sourceUrl}` : ""}`)
+        .map(
+          (a) =>
+            `- ${a.askedBy} asked: ${a.question}\n  Answer: ${a.spokenAnswer}${a.sourceUrl ? `\n  Source: ${a.sourceUrl}` : ""}`,
+        )
         .join("\n");
       const relayText = relays
         .map((r) => `- ${r.fromName} (via Slack): ${r.message}\n  Team answer: ${r.teamAnswer ?? "(no answer)"}`)
@@ -121,7 +126,10 @@ ${relayText || "(none)"}
           const response = await client.messages.parse({
             model: NOTES_MODEL,
             max_tokens: 8000,
-            output_config: { effort: "medium", format: zodOutputFormat(NotesSchema) },
+            output_config: {
+              effort: "medium",
+              format: zodOutputFormat(NotesSchema),
+            },
             messages: [{ role: "user", content: prompt }],
           });
           parsed = response.parsed_output ?? null;

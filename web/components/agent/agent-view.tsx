@@ -58,11 +58,7 @@ export function AgentView({ agentId }: { agentId: Id<"agents"> }) {
     );
   }
 
-  const status = agent?.activeMeeting
-    ? agent.activeMeeting.status === "live"
-      ? "live"
-      : "joining"
-    : "idle";
+  const status = agent?.activeMeeting ? (agent.activeMeeting.status === "live" ? "live" : "joining") : "idle";
 
   return (
     <div className="min-h-dvh bg-paper">

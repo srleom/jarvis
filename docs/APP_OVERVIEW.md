@@ -219,28 +219,28 @@ Based on the Cal Hacks 13.0 prize page (updated Oct 23). Every sponsor tool must
 
 ### Tracks we build for
 
-| Track | Prize | How Jarvis qualifies | What the rules ask for |
-| --- | --- | --- | --- |
-| **Best use of Convex** | $5,000 | Convex is the backend: all data, live sync to the whiteboard and dashboard, file storage for documents, scheduled jobs for the whiteboard loop and meeting notes. | Meaningful use. No other written rules. |
-| **Best Use of Cartesia** | Meta glasses (TBD) | Jarvis's whole voice is Cartesia Sonic. Voice is how the team talks to Jarvis and how Ben's message reaches the room. | Voice must be core. 2-minute demo-first presentation. README listing Cartesia features used and known limitations. No keys in the repo. Judged 25% each on problem, use of Cartesia, execution, and impact and responsibility (accessibility, privacy). |
-| **Best Use of Moss** | AirPods Max/Pro | Moss is Jarvis's memory search, queried mid-conversation. Fits their "Voice AI" example exactly. | Voice agents that listen, respond and act in real time. |
-| **Bright Data: Public Web Data** | Up to $1,500 credits + $500 | Web search (SERP API) plus reading the result page (Web Unlocker) for live answers. | Must be essential to the product. Must handle blocks, slow responses and empty results. Real results only, no mocked or hardcoded data in the demo. No scraping behind logins. |
-| **Anthropic** | TBD | Claude does all reasoning. | A named community, a real problem, one thing that works well, and thoughtful use of Claude including where it could go wrong. |
+| Track                            | Prize                       | How Jarvis qualifies                                                                                                                                              | What the rules ask for                                                                                                                                                                                                                                  |
+| -------------------------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Best use of Convex**           | $5,000                      | Convex is the backend: all data, live sync to the whiteboard and dashboard, file storage for documents, scheduled jobs for the whiteboard loop and meeting notes. | Meaningful use. No other written rules.                                                                                                                                                                                                                 |
+| **Best Use of Cartesia**         | Meta glasses (TBD)          | Jarvis's whole voice is Cartesia Sonic. Voice is how the team talks to Jarvis and how Ben's message reaches the room.                                             | Voice must be core. 2-minute demo-first presentation. README listing Cartesia features used and known limitations. No keys in the repo. Judged 25% each on problem, use of Cartesia, execution, and impact and responsibility (accessibility, privacy). |
+| **Best Use of Moss**             | AirPods Max/Pro             | Moss is Jarvis's memory search, queried mid-conversation. Fits their "Voice AI" example exactly.                                                                  | Voice agents that listen, respond and act in real time.                                                                                                                                                                                                 |
+| **Bright Data: Public Web Data** | Up to $1,500 credits + $500 | Web search (SERP API) plus reading the result page (Web Unlocker) for live answers.                                                                               | Must be essential to the product. Must handle blocks, slow responses and empty results. Real results only, no mocked or hardcoded data in the demo. No scraping behind logins.                                                                          |
+| **Anthropic**                    | TBD                         | Claude does all reasoning.                                                                                                                                        | A named community, a real problem, one thing that works well, and thoughtful use of Claude including where it could go wrong.                                                                                                                           |
 
 ### Tracks we submit to with no extra build
 
-| Track | Why it fits |
-| --- | --- |
-| **Microsoft Grand Prize: Built for the Real World** | A production-minded productivity agent. Judged on customer understanding, measurable usefulness, path to production, responsible design and end-to-end function. |
-| **Meta: Bringing People Closer Together with AI** | The relay keeps absent teammates connected to their team in real time. |
-| **Cal Hacks: Most Technically Complex, Best People-First** | General tracks. |
+| Track                                                      | Why it fits                                                                                                                                                      |
+| ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Microsoft Grand Prize: Built for the Real World**        | A production-minded productivity agent. Judged on customer understanding, measurable usefulness, path to production, responsible design and end-to-end function. |
+| **Meta: Bringing People Closer Together with AI**          | The relay keeps absent teammates connected to their team in real time.                                                                                           |
+| **Cal Hacks: Most Technically Complex, Best People-First** | General tracks.                                                                                                                                                  |
 
 ### Optional (P2)
 
-| Track | Prize | What it would take |
-| --- | --- | --- |
-| **Best Use of Fetch.ai** | $1,250 / $750 / $500 | A uAgent registered on Agentverse, implementing the Agent Chat Protocol, discoverable on ASI:One. The primary workflow must be completable entirely inside an ASI:One conversation. For Jarvis: catch-up and relay from ASI:One instead of Slack. Also needs a public repo, the Innovation Lab badges in the README, a 3 to 5 minute video, and registration through their ASI:One submission agent. About half a day of work. |
-| **Creao AI: Best Team Empowerment** | Share of $1,000 | Rules are in a Google Doc that needs sign-in. Read it before deciding. It may require building with Creao. |
+| Track                               | Prize                | What it would take                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ----------------------------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Best Use of Fetch.ai**            | $1,250 / $750 / $500 | A uAgent registered on Agentverse, implementing the Agent Chat Protocol, discoverable on ASI:One. The primary workflow must be completable entirely inside an ASI:One conversation. For Jarvis: catch-up and relay from ASI:One instead of Slack. Also needs a public repo, the Innovation Lab badges in the README, a 3 to 5 minute video, and registration through their ASI:One submission agent. About half a day of work. |
+| **Creao AI: Best Team Empowerment** | Share of $1,000      | Rules are in a Google Doc that needs sign-in. Read it before deciding. It may require building with Creao.                                                                                                                                                                                                                                                                                                                     |
 
 ### Considered and skipped
 
@@ -275,15 +275,15 @@ The orchestrator must be reachable from the public internet so Recall can send i
 
 ### External services
 
-| Service      | Purpose                                                       |
-| ------------ | ------------------------------------------------------------- |
-| Recall.ai    | Puts the bot in Google Meet, live transcript, chat, screenshare |
-| Claude API   | All reasoning (see "Models" below)                             |
-| Cartesia     | Text-to-speech                                                 |
-| Moss         | Memory search                                                  |
-| Bright Data  | Web search and page reading                                    |
-| Slack        | Bot DMs and channel posts                                      |
-| Convex       | Database and live sync                                         |
+| Service     | Purpose                                                         |
+| ----------- | --------------------------------------------------------------- |
+| Recall.ai   | Puts the bot in Google Meet, live transcript, chat, screenshare |
+| Claude API  | All reasoning (see "Models" below)                              |
+| Cartesia    | Text-to-speech                                                  |
+| Moss        | Memory search                                                   |
+| Bright Data | Web search and page reading                                     |
+| Slack       | Bot DMs and channel posts                                       |
+| Convex      | Database and live sync                                          |
 
 ### How the pieces talk
 

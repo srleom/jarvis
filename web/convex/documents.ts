@@ -44,7 +44,9 @@ export const save = mutation({
       mossDocIds: [],
       uploadedAt: Date.now(),
     });
-    await ctx.scheduler.runAfter(0, internal.memory.indexDocument, { documentId });
+    await ctx.scheduler.runAfter(0, internal.memory.indexDocument, {
+      documentId,
+    });
     return documentId;
   },
 });
@@ -54,8 +56,13 @@ export const retry = mutation({
   handler: async (ctx, { documentId }) => {
     const doc = await ctx.db.get("documents", documentId);
     if (!doc) return;
-    await ctx.db.patch("documents", documentId, { status: "indexing", error: undefined });
-    await ctx.scheduler.runAfter(0, internal.memory.indexDocument, { documentId });
+    await ctx.db.patch("documents", documentId, {
+      status: "indexing",
+      error: undefined,
+    });
+    await ctx.scheduler.runAfter(0, internal.memory.indexDocument, {
+      documentId,
+    });
   },
 });
 

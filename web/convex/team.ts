@@ -26,9 +26,7 @@ export const add = mutation({
     if (!slackUserId || !name) throw new ConvexError("Name and Slack user are required.");
     const existing = await ctx.db
       .query("teamMembers")
-      .withIndex("by_agent_and_slackUserId", (q) =>
-        q.eq("agentId", args.agentId).eq("slackUserId", slackUserId),
-      )
+      .withIndex("by_agent_and_slackUserId", (q) => q.eq("agentId", args.agentId).eq("slackUserId", slackUserId))
       .unique();
     if (existing) throw new ConvexError(`${existing.name} is already on the team.`);
     await ctx.db.insert("teamMembers", {
@@ -37,7 +35,9 @@ export const add = mutation({
       slackUserId,
       avatarUrl: args.avatarUrl,
     });
-    await ctx.db.patch("agents", args.agentId, { memberCount: agent.memberCount + 1 });
+    await ctx.db.patch("agents", args.agentId, {
+      memberCount: agent.memberCount + 1,
+    });
   },
 });
 
@@ -75,7 +75,12 @@ export const listSlackUsers = action({
         "Slack isn't connected yet. Set SLACK_BOT_TOKEN on the Convex deployment, or add members manually.",
       );
     }
-    const users: { id: string; name: string; handle: string; avatarUrl?: string }[] = [];
+    const users: {
+      id: string;
+      name: string;
+      handle: string;
+      avatarUrl?: string;
+    }[] = [];
     let cursor = "";
     for (let page = 0; page < 10; page++) {
       const params = new URLSearchParams({ limit: "200" });

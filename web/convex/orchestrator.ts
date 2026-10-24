@@ -65,7 +65,9 @@ export const setBot = mutation({
   args: { secret, meetingId: v.id("meetings"), recallBotId: v.string() },
   handler: async (ctx, args) => {
     assertSecret(args.secret);
-    await ctx.db.patch("meetings", args.meetingId, { recallBotId: args.recallBotId });
+    await ctx.db.patch("meetings", args.meetingId, {
+      recallBotId: args.recallBotId,
+    });
   },
 });
 
@@ -84,13 +86,19 @@ export const setStatus = mutation({
     if (args.status === "joining") {
       // A calendar bot has started joining: the agent is now busy.
       if (meeting.status === "scheduled") {
-        await ctx.db.patch("meetings", args.meetingId, { status: "joining", startedAt: Date.now() });
+        await ctx.db.patch("meetings", args.meetingId, {
+          status: "joining",
+          startedAt: Date.now(),
+        });
       }
       return;
     }
     if (args.status === "live") {
       if (meeting.status === "joining" || meeting.status === "scheduled") {
-        await ctx.db.patch("meetings", args.meetingId, { status: "live", startedAt: Date.now() });
+        await ctx.db.patch("meetings", args.meetingId, {
+          status: "live",
+          startedAt: Date.now(),
+        });
       }
       return;
     }
@@ -102,7 +110,9 @@ export const setStatus = mutation({
       });
       return;
     }
-    await ctx.runMutation(internal.meetings.finish, { meetingId: args.meetingId });
+    await ctx.runMutation(internal.meetings.finish, {
+      meetingId: args.meetingId,
+    });
     await expireOpenRelays(ctx, args.meetingId);
     await setAvatarState(ctx, args.meetingId, "listening");
   },
@@ -115,7 +125,10 @@ async function expireOpenRelays(ctx: MutationCtx, meetingId: Id<"meetings">) {
     .take(200);
   for (const r of relays) {
     if (r.status !== "answered" && r.status !== "expired") {
-      await ctx.db.patch("relayRequests", r._id, { status: "expired", updatedAt: Date.now() });
+      await ctx.db.patch("relayRequests", r._id, {
+        status: "expired",
+        updatedAt: Date.now(),
+      });
     }
   }
 }
@@ -199,7 +212,10 @@ export const applyBoardOps = mutation({
       if (op.op === "remove") {
         await ctx.db.delete("boardNotes", id);
       } else if (op.op === "move") {
-        await ctx.db.patch("boardNotes", id, { column: op.column, updatedAt: now });
+        await ctx.db.patch("boardNotes", id, {
+          column: op.column,
+          updatedAt: now,
+        });
       } else {
         await ctx.db.patch("boardNotes", id, {
           ...(op.text?.trim() ? { text: op.text.trim() } : {}),
@@ -431,7 +447,10 @@ export const claimWebhook = mutation({
       .withIndex("by_eventId", (q) => q.eq("eventId", args.eventId))
       .first();
     if (seen) return false;
-    await ctx.db.insert("webhookEvents", { eventId: args.eventId, createdAt: Date.now() });
+    await ctx.db.insert("webhookEvents", {
+      eventId: args.eventId,
+      createdAt: Date.now(),
+    });
     return true;
   },
 });
@@ -459,7 +478,9 @@ export const setCalendarSynced = mutation({
   args: { secret, linkId: v.id("calendarLinks"), syncedThrough: v.string() },
   handler: async (ctx, args) => {
     assertSecret(args.secret);
-    await ctx.db.patch("calendarLinks", args.linkId, { syncedThrough: args.syncedThrough });
+    await ctx.db.patch("calendarLinks", args.linkId, {
+      syncedThrough: args.syncedThrough,
+    });
   },
 });
 
@@ -522,7 +543,9 @@ export const scheduleCalendarMeeting = mutation({
       startedAt: args.scheduledFor,
     });
     await ctx.db.insert("avatarState", { meetingId, state: "listening" });
-    await ctx.db.patch("agents", agent._id, { meetingCount: agent.meetingCount + 1 });
+    await ctx.db.patch("agents", agent._id, {
+      meetingCount: agent.meetingCount + 1,
+    });
     return { kind: "scheduled" as const, meetingId };
   },
 });
@@ -535,9 +558,14 @@ export const discardScheduled = mutation({
     const meeting = await ctx.db.get("meetings", args.meetingId);
     if (!meeting || meeting.status !== "scheduled" || meeting.recallBotId) return;
     await ctx.db.delete("meetings", meeting._id);
-    await ctx.scheduler.runAfter(0, internal.cleanup.meetingData, { meetingId: meeting._id });
+    await ctx.scheduler.runAfter(0, internal.cleanup.meetingData, {
+      meetingId: meeting._id,
+    });
     const agent = await ctx.db.get("agents", meeting.agentId);
-    if (agent) await ctx.db.patch("agents", agent._id, { meetingCount: Math.max(0, agent.meetingCount - 1) });
+    if (agent)
+      await ctx.db.patch("agents", agent._id, {
+        meetingCount: Math.max(0, agent.meetingCount - 1),
+      });
   },
 });
 
@@ -551,7 +579,10 @@ export const cancelCalendarMeeting = mutation({
       .withIndex("by_calendarEventId", (q) => q.eq("calendarEventId", args.calendarEventId))
       .first();
     if (!meeting || meeting.status !== "scheduled") return null;
-    await ctx.db.patch("meetings", meeting._id, { status: "cancelled", endedAt: Date.now() });
+    await ctx.db.patch("meetings", meeting._id, {
+      status: "cancelled",
+      endedAt: Date.now(),
+    });
     return meeting._id;
   },
 });

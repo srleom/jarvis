@@ -9,7 +9,12 @@ import { api } from "@/convex/_generated/api";
 import type { Id } from "@/convex/_generated/dataModel";
 import { errorMessage } from "@/lib/format";
 
-type RecallCalendar = { id: string; platform: string; platformEmail: string | null; status: string };
+type RecallCalendar = {
+  id: string;
+  platform: string;
+  platformEmail: string | null;
+  status: string;
+};
 
 /** Links a calendar connected in Recall to this agent so its future Google Meet events are joined automatically. */
 export function CalendarCard({ agentId, agentName }: { agentId: Id<"agents">; agentName: string }) {
@@ -73,7 +78,16 @@ export function CalendarCard({ agentId, agentName }: { agentId: Id<"agents">; ag
               size="sm"
               disabled={busy === c.id}
               onClick={() =>
-                run(c.id, () => link({ agentId, recallCalendarId: c.id, platformEmail: c.platformEmail ?? undefined }), "Calendar linked")
+                run(
+                  c.id,
+                  () =>
+                    link({
+                      agentId,
+                      recallCalendarId: c.id,
+                      platformEmail: c.platformEmail ?? undefined,
+                    }),
+                  "Calendar linked",
+                )
               }
             >
               {busy === c.id && <Loader2 className="animate-spin" />}

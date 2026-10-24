@@ -91,7 +91,9 @@ export function createRecallClient(opts: RecallClientOptions) {
           await sleep(backoff(attempt));
           continue;
         }
-        throw new Error(`Couldn't reach Recall: ${(e as Error).message}`);
+        throw new Error(`Couldn't reach Recall: ${(e as Error).message}`, {
+          cause: e,
+        });
       }
       const text = await res.text();
       if (res.ok) return (text ? JSON.parse(text) : null) as T;
@@ -131,23 +133,27 @@ export function createRecallClient(opts: RecallClientOptions) {
 
     /** Bots Recall already holds for a meeting, used to reconcile after a crash between create and save. */
     async findBotsByMeetingId(meetingId: string) {
-      const page = await request<Page<{ id: string }>>("GET", v1(`/bot/?metadata__meetingId=${encodeURIComponent(meetingId)}`));
+      const page = await request<Page<{ id: string }>>(
+        "GET",
+        v1(`/bot/?metadata__meetingId=${encodeURIComponent(meetingId)}`),
+      );
       return page.results;
     },
 
     async sendChat(botId: string, message: string) {
       // Google Meet chat messages are capped at 500 characters.
-      await request("POST", v1(`/bot/${botId}/send_chat_message/`), { message: message.slice(0, 500) });
+      await request("POST", v1(`/bot/${botId}/send_chat_message/`), {
+        message: message.slice(0, 500),
+      });
     },
 
     leaveCall: (botId: string) => request("POST", v1(`/bot/${botId}/leave_call/`)),
 
     /** Latest status code for a bot (e.g. "in_call_recording", "call_ended", "done", "fatal"). */
-    async getBotStatus(botId: string) {
-      const bot = await request<{ status_changes?: { code: string; sub_code?: string | null }[] }>(
-        "GET",
-        v1(`/bot/${botId}/`),
-      );
+    getBotStatus: async (botId: string) => {
+      const bot = await request<{
+        status_changes?: { code: string; sub_code?: string | null }[];
+      }>("GET", v1(`/bot/${botId}/`));
       const last = bot.status_changes?.at(-1);
       return last ? { code: last.code, subCode: last.sub_code ?? null } : null;
     },
@@ -178,21 +184,35 @@ export function joinMessage(name: string) {
 
 /** Everything about the bot except its meeting URL and join time, shared by pasted links and calendar events. */
 export function buildBotConfig(
-  c: Pick<Config, "publicUrl" | "botPageBaseUrl"> & { recall: Pick<Config["recall"], "outputMode"> },
+  c: Pick<Config, "publicUrl" | "botPageBaseUrl"> & {
+    recall: Pick<Config["recall"], "outputMode">;
+  },
   opts: { meetingId: string; botName: string },
 ) {
   return {
     bot_name: opts.botName,
     metadata: { meetingId: opts.meetingId },
     output_media: {
-      [c.recall.outputMode]: { kind: "webpage", config: { url: `${c.botPageBaseUrl}/bot/${opts.meetingId}` } },
+      [c.recall.outputMode]: {
+        kind: "webpage",
+        config: { url: `${c.botPageBaseUrl}/bot/${opts.meetingId}` },
+      },
     },
     chat: {
-      on_bot_join: { send_to: "everyone", message: joinMessage(opts.botName), pin: true },
+      on_bot_join: {
+        send_to: "everyone",
+        message: joinMessage(opts.botName),
+        pin: true,
+      },
     },
     recording_config: {
       transcript: {
-        provider: { recallai_streaming: { mode: "prioritize_low_latency", language_code: "en" } },
+        provider: {
+          recallai_streaming: {
+            mode: "prioritize_low_latency",
+            language_code: "en",
+          },
+        },
         diarization: { use_separate_streams_when_available: true },
       },
       realtime_endpoints: [
@@ -209,7 +229,10 @@ export function buildBotConfig(
 
 // ---------------------------------------------------------------- default instance for the running server
 
-export const client = createRecallClient({ apiKey: config.recall.apiKey, region: config.recall.region });
+export const client = createRecallClient({
+  apiKey: config.recall.apiKey,
+  region: config.recall.region,
+});
 
 export async function createBot(opts: { meetingId: string; meetUrl: string; botName: string }) {
   const body = { meeting_url: opts.meetUrl, ...buildBotConfig(config, opts) };

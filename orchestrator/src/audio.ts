@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { WebSocket } from "ws";
+import type { RawData, WebSocket } from "ws";
 import { logger } from "./log.js";
 import { wavDurationMs } from "./tts.js";
 
@@ -8,6 +8,12 @@ const log = logger("audio");
 /** WebSocket clients (bot pages) per meeting, and playback completion callbacks. */
 const clients = new Map<string, Set<WebSocket>>();
 const waiters = new Map<string, () => void>();
+
+function rawToString(data: RawData): string {
+  if (Array.isArray(data)) return Buffer.concat(data).toString();
+  if (data instanceof ArrayBuffer) return Buffer.from(data).toString();
+  return data.toString();
+}
 
 export function attachClient(meetingId: string, ws: WebSocket) {
   let set = clients.get(meetingId);
@@ -20,7 +26,10 @@ export function attachClient(meetingId: string, ws: WebSocket) {
   ws.on("message", (data, isBinary) => {
     if (isBinary) return;
     try {
-      const msg = JSON.parse(data.toString()) as { type: string; id?: string };
+      const msg = JSON.parse(rawToString(data)) as {
+        type: string;
+        id?: string;
+      };
       if (msg.type === "ended" && msg.id) {
         waiters.get(msg.id)?.();
         waiters.delete(msg.id);
@@ -31,7 +40,7 @@ export function attachClient(meetingId: string, ws: WebSocket) {
   });
   ws.on("close", () => {
     clearInterval(ping);
-    set!.delete(ws);
+    set.delete(ws);
     log.info(`bot page disconnected for ${meetingId}`);
   });
 }
@@ -66,10 +75,13 @@ export function play(meetingId: string, wav: Buffer): Promise<boolean> {
   target.send(JSON.stringify({ type: "play", id }));
   target.send(wav, { binary: true });
   return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      waiters.delete(id);
-      resolve(true);
-    }, wavDurationMs(wav) + 4000);
+    const timeout = setTimeout(
+      () => {
+        waiters.delete(id);
+        resolve(true);
+      },
+      wavDurationMs(wav) + 4000,
+    );
     waiters.set(id, () => {
       clearTimeout(timeout);
       resolve(true);

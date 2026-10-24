@@ -28,8 +28,8 @@ export function MeetingsTab({ agentId }: { agentId: Id<"agents"> }) {
   if (meetings.length === 0) {
     return (
       <EmptyState icon={<CalendarDays />} title="No meetings yet">
-        Paste a Google Meet link above to send this agent into a call. Notes, the whiteboard and the
-        transcript will show up here.
+        Paste a Google Meet link above to send this agent into a call. Notes, the whiteboard and the transcript will
+        show up here.
       </EmptyState>
     );
   }
@@ -47,7 +47,9 @@ export function MeetingsTab({ agentId }: { agentId: Id<"agents"> }) {
             >
               <div className="hidden w-14 shrink-0 flex-col items-center rounded-lg bg-muted/70 py-1.5 sm:flex">
                 <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
-                  {new Date(m.startedAt).toLocaleDateString("en-US", { month: "short" })}
+                  {new Date(m.startedAt).toLocaleDateString("en-US", {
+                    month: "short",
+                  })}
                 </span>
                 <span className="text-lg leading-none font-semibold tabular-nums">
                   {new Date(m.startedAt).getDate()}

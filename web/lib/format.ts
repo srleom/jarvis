@@ -34,7 +34,10 @@ export function formatDate(ts: number) {
 }
 
 export function formatTime(ts: number) {
-  return new Date(ts).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  return new Date(ts).toLocaleTimeString("en-US", {
+    hour: "numeric",
+    minute: "2-digit",
+  });
 }
 
 export function formatClock(seconds: number) {

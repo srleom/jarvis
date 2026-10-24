@@ -28,7 +28,9 @@ const TOOLS: Anthropic.Tool[] = [
       "Search the team's memory: uploaded context documents (briefs, budgets), earlier parts of this call, and notes from past meetings. Use for anything about the team's own plans or decisions.",
     input_schema: {
       type: "object",
-      properties: { query: { type: "string", description: "What to look for." } },
+      properties: {
+        query: { type: "string", description: "What to look for." },
+      },
       required: ["query"],
       additionalProperties: false,
     },
@@ -127,7 +129,12 @@ ${opts.askedBy} asks: ${opts.question}`,
       const results = await Promise.all(
         uses.map(async (use): Promise<Anthropic.ToolResultBlockParam> => {
           if (toolCalls >= MAX_TOOL_CALLS || toolMs >= TOOL_BUDGET_MS) {
-            return { type: "tool_result", tool_use_id: use.id, content: "Time is up. Answer with what you have.", is_error: true };
+            return {
+              type: "tool_result",
+              tool_use_id: use.id,
+              content: "Time is up. Answer with what you have.",
+              is_error: true,
+            };
           }
           toolCalls++;
           const remaining = Math.max(1500, TOOL_BUDGET_MS - toolMs);
@@ -135,7 +142,12 @@ ${opts.askedBy} asks: ${opts.question}`,
           const out = await runTool(use, opts.indexName, remaining, toolLog);
           toolMs += Date.now() - t0;
           if (out.webFailed) webFailed = true;
-          return { type: "tool_result", tool_use_id: use.id, content: out.content, is_error: out.isError };
+          return {
+            type: "tool_result",
+            tool_use_id: use.id,
+            content: out.content,
+            is_error: out.isError,
+          };
         }),
       );
       messages.push({ role: "user", content: results });
@@ -150,7 +162,10 @@ ${opts.askedBy} asks: ${opts.question}`,
     // Retry once by asking for the structured answer again.
     if (turn < 5) {
       messages.push({ role: "assistant", content: res.content });
-      messages.push({ role: "user", content: "Give your final answer now in the required JSON format." });
+      messages.push({
+        role: "user",
+        content: "Give your final answer now in the required JSON format.",
+      });
       continue;
     }
     break;
@@ -178,14 +193,27 @@ async function runTool(
       const t0 = Date.now();
       try {
         const hits = await memory.search(indexName, input.query ?? "", 5);
-        toolLog.push({ tool: "search_memory", input: input.query ?? "", status: hits.length ? "ok" : "empty", ms: Date.now() - t0 });
+        toolLog.push({
+          tool: "search_memory",
+          input: input.query ?? "",
+          status: hits.length ? "ok" : "empty",
+          ms: Date.now() - t0,
+        });
         if (!hits.length) return { content: "No matching memory." };
         return {
           content: hits.map((h, i) => `[${i + 1}] (${h.label})\n${h.text}`).join("\n\n"),
         };
       } catch (e) {
-        toolLog.push({ tool: "search_memory", input: input.query ?? "", status: "error", ms: Date.now() - t0 });
-        return { content: `Memory search failed: ${(e as Error).message}`, isError: true };
+        toolLog.push({
+          tool: "search_memory",
+          input: input.query ?? "",
+          status: "error",
+          ms: Date.now() - t0,
+        });
+        return {
+          content: `Memory search failed: ${(e as Error).message}`,
+          isError: true,
+        };
       }
     }
     case "web_search": {
@@ -209,7 +237,10 @@ async function runTool(
       const { text, log: entry } = await readPage(input.url ?? "", timeoutMs);
       toolLog.push(entry);
       if (!text) {
-        return { content: `That page was ${entry.status}. Try another result.`, isError: true };
+        return {
+          content: `That page was ${entry.status}. Try another result.`,
+          isError: true,
+        };
       }
       return { content: text };
     }

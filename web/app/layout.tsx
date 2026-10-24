@@ -5,14 +5,20 @@ import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import "./globals.css";
 
-const sans = Instrument_Sans({ variable: "--font-instrument-sans", subsets: ["latin"] });
+const sans = Instrument_Sans({
+  variable: "--font-instrument-sans",
+  subsets: ["latin"],
+});
 const serif = Instrument_Serif({
   variable: "--font-instrument-serif",
   subsets: ["latin"],
   weight: "400",
   style: ["normal", "italic"],
 });
-const mono = JetBrains_Mono({ variable: "--font-jetbrains-mono", subsets: ["latin"] });
+const mono = JetBrains_Mono({
+  variable: "--font-jetbrains-mono",
+  subsets: ["latin"],
+});
 
 export const metadata: Metadata = {
   title: { default: "Jarvis", template: "%s · Jarvis" },

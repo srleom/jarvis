@@ -62,7 +62,9 @@ export const meetingData = internalMutation({
       if (rows.length === BATCH) more = true;
     }
     if (more) {
-      await ctx.scheduler.runAfter(0, internal.cleanup.meetingData, { meetingId });
+      await ctx.scheduler.runAfter(0, internal.cleanup.meetingData, {
+        meetingId,
+      });
     }
   },
 });

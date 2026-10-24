@@ -15,15 +15,23 @@ import { startSlack } from "./slack.js";
 
 const log = logger("server");
 
-const syncCalendar = createCalendarSync({ recall: recall.client, store: convexCalendarStore, config });
+const syncCalendar = createCalendarSync({
+  recall: recall.client,
+  store: convexCalendarStore,
+  config,
+});
 
 const app = createApp({
-  health: () => ({ ok: true, missing: missingConfig(), sessions: allSessions().length }),
+  health: () => ({
+    ok: true,
+    missing: missingConfig(),
+    sessions: allSessions().length,
+  }),
   webhooks: {
     secret: config.recall.webhookSecret,
     claim: (eventId) => convex.mutation(api.orchestrator.claimWebhook, { secret, eventId }),
     onRealtime: (evt) => handleRealtime(evt as RealtimeEvent),
-    onDashboard: (evt) => handleDashboard(evt),
+    onDashboard: (evt) => handleDashboard(evt as DashboardEvent),
   },
 });
 
@@ -41,7 +49,11 @@ function internalOnly(req: Request, res: Response, next: NextFunction) {
 function route(handler: (body: Record<string, unknown>) => Promise<unknown>) {
   return async (req: Request, res: Response) => {
     try {
-      res.json((await handler(req.body ?? {})) ?? { ok: true });
+      res.json(
+        (await handler((req.body ?? {}) as Record<string, unknown>)) ?? {
+          ok: true,
+        },
+      );
     } catch (e) {
       log.error(`${req.path} failed: ${(e as Error).message}`);
       res.status(500).json({ error: (e as Error).message });
@@ -82,18 +94,31 @@ async function startBot(meetingId: string, session: MeetingSession) {
     const existing = await recall.client.findBotsByMeetingId(meetingId).catch(() => []);
     botId =
       existing[0]?.id ??
-      (await recall.createBot({ meetingId, meetUrl: await meetUrlOf(meetingId), botName: session.name })).id;
+      (
+        await recall.createBot({
+          meetingId,
+          meetUrl: await meetUrlOf(meetingId),
+          botName: session.name,
+        })
+      ).id;
   } catch (e) {
     dropSession(meetingId);
     throw e;
   }
   session.botId = botId;
-  await convex.mutation(api.orchestrator.setBot, { secret, meetingId: meetingId as Id<"meetings">, recallBotId: botId });
+  await convex.mutation(api.orchestrator.setBot, {
+    secret,
+    meetingId: meetingId as Id<"meetings">,
+    recallBotId: botId,
+  });
   return { botId };
 }
 
 async function meetUrlOf(meetingId: string) {
-  const ctx = await convex.query(api.orchestrator.meetingContext, { secret, meetingId: meetingId as Id<"meetings"> });
+  const ctx = await convex.query(api.orchestrator.meetingContext, {
+    secret,
+    meetingId: meetingId as Id<"meetings">,
+  });
   if (!ctx) throw new Error("Meeting not found.");
   return ctx.meeting.meetUrl;
 }
@@ -122,7 +147,10 @@ app.post(
   internalOnly,
   route(async (body) => {
     const meetingId = str(body.meetingId, "meetingId");
-    const ctx = await convex.query(api.orchestrator.meetingContext, { secret, meetingId: meetingId as Id<"meetings"> });
+    const ctx = await convex.query(api.orchestrator.meetingContext, {
+      secret,
+      meetingId: meetingId as Id<"meetings">,
+    });
     const eventId = ctx?.meeting.calendarEventId;
     if (eventId) await recall.client.removeCalendarEventBot(eventId);
     dropSession(meetingId);
@@ -145,7 +173,9 @@ app.post(
 app.post(
   "/calendar/sync",
   internalOnly,
-  route(async (body) => ({ result: await syncCalendar(str(body.recallCalendarId, "recallCalendarId")) })),
+  route(async (body) => ({
+    result: await syncCalendar(str(body.recallCalendarId, "recallCalendarId")),
+  })),
 );
 
 async function finish(session: MeetingSession, failed = false, error?: string) {
@@ -226,7 +256,10 @@ async function sessionForBot(bot?: { id: string; metadata?: Record<string, strin
   if (!bot) return null;
   let meetingId = bot.metadata?.meetingId;
   if (!meetingId) {
-    const m = await convex.query(api.orchestrator.meetingByBotId, { secret, recallBotId: bot.id });
+    const m = await convex.query(api.orchestrator.meetingByBotId, {
+      secret,
+      recallBotId: bot.id,
+    });
     meetingId = m?._id;
   }
   if (!meetingId) return null;
@@ -245,27 +278,43 @@ async function handleRealtime(evt: RealtimeEvent) {
 
   if (evt.event === "transcript.partial_data" || evt.event === "transcript.data") {
     const words = inner.words ?? [];
-    const text = words.map((w) => w.text).join(" ").replace(/\s+([,.!?])/g, "$1").trim();
+    const text = words
+      .map((w) => w.text)
+      .join(" ")
+      .replace(/\s+([,.!?])/g, "$1")
+      .trim();
     if (!text) return;
     // Transcript flowing means the bot is in the call, even if no status webhook arrived.
     void session.goLive();
     if (evt.event === "transcript.partial_data") session.onPartial(pid, speaker, text);
-    else await session.onFinal(pid, speaker, text, words[0]?.start_timestamp?.relative ?? 0);
+    else session.onFinal(pid, speaker, text, words[0]?.start_timestamp?.relative ?? 0);
   } else if (evt.event === "participant_events.chat_message") {
     const text = inner.data?.text ?? "";
-    if (text) await session.onChat(speaker, text);
+    if (text) session.onChat(speaker, text);
   }
 }
 
 async function applyStatus(session: MeetingSession, code: string, subCode: string | null) {
   if (code === "joining_call" || code === "in_waiting_room") {
-    await convex.mutation(api.orchestrator.setStatus, { secret, meetingId: session.meetingId, status: "joining" });
+    await convex.mutation(api.orchestrator.setStatus, {
+      secret,
+      meetingId: session.meetingId,
+      status: "joining",
+    });
   } else if (code === "in_call_recording") await session.goLive();
   else if (code === "call_ended" || code === "done") await finish(session);
-  else if (code === "fatal") await finish(session, true, `The bot couldn't stay in the call (${subCode ?? "fatal error"}).`);
+  else if (code === "fatal")
+    await finish(session, true, `The bot couldn't stay in the call (${subCode ?? "fatal error"}).`);
 }
 
-type DashboardEvent = { event: string; data: Record<string, any> };
+type DashboardEvent = {
+  event: string;
+  data?: {
+    bot?: { id: string; metadata?: Record<string, string> };
+    data?: { sub_code?: string | null };
+    calendar_id?: unknown;
+  };
+};
 
 async function handleDashboard(evt: DashboardEvent) {
   if (evt.event.startsWith("bot.")) {
@@ -297,9 +346,13 @@ setInterval(() => {
 async function reconcileCalendars() {
   if (!config.secret || !config.recall.apiKey) return;
   const links = await convex.query(api.orchestrator.calendarLinks, { secret });
-  for (const l of links) await syncCalendar(l.recallCalendarId).catch((e) => log.warn(`calendar sync failed: ${(e as Error).message}`));
+  for (const l of links)
+    await syncCalendar(l.recallCalendarId).catch((e) => log.warn(`calendar sync failed: ${(e as Error).message}`));
 }
-setInterval(() => void reconcileCalendars().catch((e) => log.warn(`reconcile failed: ${(e as Error).message}`)), 10 * 60_000);
+setInterval(
+  () => void reconcileCalendars().catch((e) => log.warn(`reconcile failed: ${(e as Error).message}`)),
+  10 * 60_000,
+);
 
 // ------------------------------------------------------------------ server + audio socket
 
@@ -319,7 +372,9 @@ server.on("upgrade", (req, socket, head) => {
 async function resumeActiveMeetings() {
   if (!config.secret) return;
   try {
-    const active = await convex.query(api.orchestrator.activeMeetings, { secret });
+    const active = await convex.query(api.orchestrator.activeMeetings, {
+      secret,
+    });
     for (const m of active) await loadSession(m._id);
     if (active.length) log.info(`resumed ${active.length} active meeting(s)`);
   } catch (e) {

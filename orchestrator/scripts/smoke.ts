@@ -20,16 +20,22 @@ const config = buildConfig({
 });
 assert.ok(missingConfig(config).every((m) => !m.startsWith("RECALL") && !m.startsWith("PUBLIC")));
 // The Recall client is built from the same injected settings the server would use.
-createRecallClient({ apiKey: config.recall.apiKey, region: config.recall.region });
+createRecallClient({
+  apiKey: config.recall.apiKey,
+  region: config.recall.region,
+});
 
 const seen: string[] = [];
 const app = createApp({
   health: () => ({ ok: true }),
   webhooks: {
     secret: config.recall.webhookSecret,
-    claim: async () => true,
-    onRealtime: async () => undefined,
-    onDashboard: async (e) => void seen.push(e.event),
+    claim: () => Promise.resolve(true),
+    onRealtime: () => Promise.resolve(),
+    onDashboard: (e) => {
+      seen.push(e.event);
+      return Promise.resolve();
+    },
   },
 });
 
@@ -41,7 +47,11 @@ try {
   const body = JSON.stringify({ event: "bot.done", data: {} });
   const bad = await fetch(`${base}/recall/webhooks`, { method: "POST", body });
   assert.equal(bad.status, 401);
-  const ok = await fetch(`${base}/recall/webhooks`, { method: "POST", body, headers: signRecallPayload(secret, "msg_smoke", body) });
+  const ok = await fetch(`${base}/recall/webhooks`, {
+    method: "POST",
+    body,
+    headers: signRecallPayload(secret, "msg_smoke", body),
+  });
   assert.equal(ok.status, 200);
   await new Promise((r) => setTimeout(r, 20));
   assert.deepEqual(seen, ["bot.done"]);

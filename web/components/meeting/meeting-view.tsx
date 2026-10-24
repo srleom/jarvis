@@ -40,24 +40,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { api } from "@/convex/_generated/api";
 import type { Doc, Id } from "@/convex/_generated/dataModel";
-import {
-  domainOf,
-  errorMessage,
-  formatClock,
-  formatDate,
-  formatDuration,
-  formatTime,
-} from "@/lib/format";
+import { domainOf, errorMessage, formatClock, formatDate, formatDuration, formatTime } from "@/lib/format";
 import { useNow } from "@/lib/use-now";
 import { cn } from "@/lib/utils";
 
-export function MeetingView({
-  agentId,
-  meetingId,
-}: {
-  agentId: Id<"agents">;
-  meetingId: Id<"meetings">;
-}) {
+export function MeetingView({ agentId, meetingId }: { agentId: Id<"agents">; meetingId: Id<"meetings"> }) {
   const data = useQuery(api.meetings.get, { meetingId });
   const board = useQuery(api.meetings.board, { meetingId });
   const answers = useQuery(api.meetings.answers, { meetingId });
@@ -92,7 +79,9 @@ export function MeetingView({
       <AppHeader
         crumbs={[
           { label: data?.agentName ?? "…", href: `/agents/${agentId}` },
-          { label: meeting?.title ?? (inProgress ? "Live meeting" : "Meeting") },
+          {
+            label: meeting?.title ?? (inProgress ? "Live meeting" : "Meeting"),
+          },
         ]}
       />
       <main className="mx-auto max-w-6xl px-4 pb-24 pt-10 sm:px-6">
@@ -256,8 +245,8 @@ function MeetingActions({ meeting, agentId }: { meeting: Doc<"meetings">; agentI
             <AlertDialogHeader>
               <AlertDialogTitle>Delete this meeting?</AlertDialogTitle>
               <AlertDialogDescription>
-                The notes, whiteboard, answers, relay log and transcript are deleted, and the meeting is
-                removed from the agent&rsquo;s memory. Messages already posted to Slack stay there.
+                The notes, whiteboard, answers, relay log and transcript are deleted, and the meeting is removed from
+                the agent&rsquo;s memory. Messages already posted to Slack stay there.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -400,7 +389,10 @@ function RelayPanel({ relays }: { relays: Doc<"relayRequests">[] | undefined }) 
       {relays.map((r) => (
         <li key={r._id} className="rounded-2xl border bg-card p-5">
           <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-medium">{r.fromName} <span className="font-normal text-muted-foreground">via Slack · {formatTime(r.createdAt)}</span></p>
+            <p className="text-sm font-medium">
+              {r.fromName}{" "}
+              <span className="font-normal text-muted-foreground">via Slack · {formatTime(r.createdAt)}</span>
+            </p>
             <span
               className={cn(
                 "rounded-full px-2.5 py-0.5 text-xs font-medium",
@@ -442,13 +434,7 @@ function RelayPanel({ relays }: { relays: Doc<"relayRequests">[] | undefined }) 
 
 const SPEAKER_TINTS = ["topics", "decisions", "questions", "actions", "answers"] as const;
 
-function TranscriptPanel({
-  segments,
-  live,
-}: {
-  segments: Doc<"transcriptSegments">[] | undefined;
-  live: boolean;
-}) {
+function TranscriptPanel({ segments, live }: { segments: Doc<"transcriptSegments">[] | undefined; live: boolean }) {
   const [filter, setFilter] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
   const speakers = useMemo(() => {
@@ -462,9 +448,7 @@ function TranscriptPanel({
   const shown = useMemo(() => {
     const q = filter.trim().toLowerCase();
     if (!q) return segments ?? [];
-    return (segments ?? []).filter(
-      (s) => s.text.toLowerCase().includes(q) || s.speaker.toLowerCase().includes(q),
-    );
+    return (segments ?? []).filter((s) => s.text.toLowerCase().includes(q) || s.speaker.toLowerCase().includes(q));
   }, [segments, filter]);
 
   useEffect(() => {
@@ -497,7 +481,13 @@ function TranscriptPanel({
           const continued = prev?.speaker === s.speaker;
           const tint = speakers.get(s.speaker) ?? "topics";
           return (
-            <li key={s._id} className={cn("grid grid-cols-[56px_1fr] gap-3 px-5", continued ? "pb-2" : "border-t pt-4 pb-2 first:border-t-0")}>
+            <li
+              key={s._id}
+              className={cn(
+                "grid grid-cols-[56px_1fr] gap-3 px-5",
+                continued ? "pb-2" : "border-t pt-4 pb-2 first:border-t-0",
+              )}
+            >
               <span className="pt-0.5 font-mono text-xs text-muted-foreground tabular-nums">
                 {formatClock(s.startTime)}
               </span>
@@ -512,9 +502,7 @@ function TranscriptPanel({
             </li>
           );
         })}
-        {shown.length === 0 && (
-          <li className="px-5 py-8 text-center text-sm text-muted-foreground">No lines match.</li>
-        )}
+        {shown.length === 0 && <li className="px-5 py-8 text-center text-sm text-muted-foreground">No lines match.</li>}
       </ol>
       <div ref={bottom} />
     </div>

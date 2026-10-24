@@ -7,7 +7,10 @@ function harness(responses: (Response | Error)[]) {
   const calls: { url: string; init: RequestInit }[] = [];
   const sleeps: number[] = [];
   const fetchFake: typeof fetch = async (url, init) => {
-    calls.push({ url: String(url), init: init ?? {} });
+    calls.push({
+      url: url instanceof Request ? url.url : String(url),
+      init: init ?? {},
+    });
     const next = responses.shift();
     if (!next) throw new Error("unexpected call");
     if (next instanceof Error) throw next;
@@ -25,14 +28,19 @@ function harness(responses: (Response | Error)[]) {
 
 test("sends the key to the configured region only", async () => {
   const { client, calls } = harness([fakeResponse(200, { id: "bot_1" })]);
-  await client.createBot({ meeting_url: "https://meet.google.com/abc-defg-hij" });
+  await client.createBot({
+    meeting_url: "https://meet.google.com/abc-defg-hij",
+  });
   assert.equal(calls[0]!.url, "https://us-west-2.recall.ai/api/v1/bot/");
   assert.equal((calls[0]!.init.headers as Record<string, string>).Authorization, "fake-key");
   await assert.rejects(client.request("GET", "https://evil.example/api/v1/bot/"));
 });
 
 test("waits for Retry-After on 429 and then succeeds", async () => {
-  const { client, calls, sleeps } = harness([fakeResponse(429, "slow down", { "retry-after": "3" }), fakeResponse(200, { id: "bot_1" })]);
+  const { client, calls, sleeps } = harness([
+    fakeResponse(429, "slow down", { "retry-after": "3" }),
+    fakeResponse(200, { id: "bot_1" }),
+  ]);
   assert.deepEqual(await client.createBot({}), { id: "bot_1" });
   assert.equal(calls.length, 2);
   assert.deepEqual(sleeps, [3000]);
@@ -52,22 +60,35 @@ test("never retries a create after an ambiguous network failure", async () => {
 
 test("retries reads after a network failure", async () => {
   const { client, calls } = harness([new Error("reset"), fakeResponse(200, { status_changes: [{ code: "done" }] })]);
-  assert.deepEqual(await client.getBotStatus("bot_1"), { code: "done", subCode: null });
+  assert.deepEqual(await client.getBotStatus("bot_1"), {
+    code: "done",
+    subCode: null,
+  });
   assert.equal(calls.length, 2);
 });
 
 test("follows pagination cursors unchanged", async () => {
   const next = "https://us-west-2.recall.ai/api/v2/calendar-events/?cursor=abc&calendar_id=c1";
-  const { client, calls } = harness([fakeResponse(200, { results: [{ id: "e1" }], next }), fakeResponse(200, { results: [{ id: "e2" }], next: null })]);
+  const { client, calls } = harness([
+    fakeResponse(200, { results: [{ id: "e1" }], next }),
+    fakeResponse(200, { results: [{ id: "e2" }], next: null }),
+  ]);
   const events = await client.listCalendarEvents("c1", "2026-01-01T00:00:00Z");
-  assert.deepEqual(events.map((e) => e.id), ["e1", "e2"]);
+  assert.deepEqual(
+    events.map((e) => e.id),
+    ["e1", "e2"],
+  );
   assert.match(calls[0]!.url, /calendar_id=c1&updated_at__gte=2026-01-01T00%3A00%3A00Z/);
   assert.equal(calls[1]!.url, next);
 });
 
 test("bot config carries the meeting id, Recall transcription and a slash-terminated signed webhook URL", () => {
   const cfg = buildBotConfig(
-    { publicUrl: "https://api.example.test", botPageBaseUrl: "https://web.example.test", recall: { outputMode: "screenshare" } },
+    {
+      publicUrl: "https://api.example.test",
+      botPageBaseUrl: "https://web.example.test",
+      recall: { outputMode: "screenshare" },
+    },
     { meetingId: "m1", botName: "Jarvis" },
   );
   assert.deepEqual(cfg.metadata, { meetingId: "m1" });

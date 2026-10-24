@@ -68,7 +68,11 @@ export function useVoice(meetingId: string) {
               current = null;
               resolve();
             };
-            send({ type: "started", id, durationMs: Math.round(audio.duration * 1000) });
+            send({
+              type: "started",
+              id,
+              durationMs: Math.round(audio.duration * 1000),
+            });
             src.start();
           });
         } catch (e) {

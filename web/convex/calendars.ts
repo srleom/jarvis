@@ -18,13 +18,22 @@ export const available = action({
   args: {},
   handler: async () => {
     return await callOrchestrator<{
-      calendars: { id: string; platform: string; platformEmail: string | null; status: string }[];
+      calendars: {
+        id: string;
+        platform: string;
+        platformEmail: string | null;
+        status: string;
+      }[];
     }>("/calendar/list", {});
   },
 });
 
 export const link = mutation({
-  args: { agentId: v.id("agents"), recallCalendarId: v.string(), platformEmail: v.optional(v.string()) },
+  args: {
+    agentId: v.id("agents"),
+    recallCalendarId: v.string(),
+    platformEmail: v.optional(v.string()),
+  },
   handler: async (ctx, args) => {
     const agent = await ctx.db.get("agents", args.agentId);
     if (!agent) throw new ConvexError("Agent not found.");
@@ -42,7 +51,9 @@ export const link = mutation({
       platformEmail: args.platformEmail,
       createdAt: Date.now(),
     });
-    await ctx.scheduler.runAfter(0, internal.calendars.sync, { recallCalendarId: args.recallCalendarId });
+    await ctx.scheduler.runAfter(0, internal.calendars.sync, {
+      recallCalendarId: args.recallCalendarId,
+    });
     return id;
   },
 });
@@ -59,8 +70,13 @@ export const unlink = mutation({
       .take(200);
     for (const m of scheduled) {
       if (m.source !== "calendar") continue;
-      await ctx.db.patch("meetings", m._id, { status: "cancelled", endedAt: Date.now() });
-      await ctx.scheduler.runAfter(0, internal.meetings.unscheduleBot, { meetingId: m._id });
+      await ctx.db.patch("meetings", m._id, {
+        status: "cancelled",
+        endedAt: Date.now(),
+      });
+      await ctx.scheduler.runAfter(0, internal.meetings.unscheduleBot, {
+        meetingId: m._id,
+      });
     }
     await ctx.db.delete("calendarLinks", linkId);
   },

@@ -18,19 +18,18 @@ export type MemoryHit = {
 export const indexDocument = internalAction({
   args: { documentId: v.id("documents") },
   handler: async (ctx, { documentId }) => {
-    const info = await ctx.runQuery(internal.documents.getForIndexing, { documentId });
+    const info = await ctx.runQuery(internal.documents.getForIndexing, {
+      documentId,
+    });
     if (!info || !info.url) return;
     try {
-      const result = await callOrchestrator<{ docIds: string[] }>(
-        "/memory/index-document",
-        {
-          indexName: info.indexName,
-          documentId,
-          fileName: info.doc.fileName,
-          contentType: info.doc.contentType,
-          url: info.url,
-        },
-      );
+      const result = await callOrchestrator<{ docIds: string[] }>("/memory/index-document", {
+        indexName: info.indexName,
+        documentId,
+        fileName: info.doc.fileName,
+        contentType: info.doc.contentType,
+        url: info.url,
+      });
       await ctx.runMutation(internal.documents.setIndexResult, {
         documentId,
         indexName: info.indexName,
@@ -90,7 +89,9 @@ export const addDocs = internalAction({
 export const search = action({
   args: { agentId: v.id("agents"), query: v.string() },
   handler: async (ctx, { agentId, query }): Promise<MemoryHit[]> => {
-    const agent = await ctx.runQuery(internal.meetings.agentForAction, { agentId });
+    const agent = await ctx.runQuery(internal.meetings.agentForAction, {
+      agentId,
+    });
     if (!agent) throw new ConvexError("Agent not found.");
     if (!query.trim()) return [];
     try {

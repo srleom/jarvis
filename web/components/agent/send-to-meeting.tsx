@@ -51,12 +51,12 @@ export function SendToMeeting({ agent }: { agent: AgentDetail }) {
     const live = active.status === "live";
     return (
       <div className="flex items-center gap-3 rounded-xl border bg-card p-3 pl-4 shadow-[0_1px_2px_oklch(0.2_0.01_60/0.04)]">
-        <span className={`size-2 shrink-0 rounded-full live-dot ${live ? "bg-live text-live" : "bg-signal text-signal"}`} />
+        <span
+          className={`size-2 shrink-0 rounded-full live-dot ${live ? "bg-live text-live" : "bg-signal text-signal"}`}
+        />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-medium">{live ? "In a meeting now" : "Joining the call…"}</p>
-          <p className="truncate font-mono text-xs text-muted-foreground">
-            {active.meetUrl.replace("https://", "")}
-          </p>
+          <p className="truncate font-mono text-xs text-muted-foreground">{active.meetUrl.replace("https://", "")}</p>
         </div>
         <Button variant="ghost" size="sm" onClick={removeFromCall} disabled={busy} className="text-muted-foreground">
           <PhoneOff /> <span className="hidden sm:inline">Remove</span>
@@ -71,10 +71,7 @@ export function SendToMeeting({ agent }: { agent: AgentDetail }) {
   }
 
   return (
-    <form
-      onSubmit={submit}
-      className="rounded-xl border bg-card p-3 shadow-[0_1px_2px_oklch(0.2_0.01_60/0.04)]"
-    >
+    <form onSubmit={submit} className="rounded-xl border bg-card p-3 shadow-[0_1px_2px_oklch(0.2_0.01_60/0.04)]">
       <label htmlFor="meet-url" className="mb-2 block px-1 text-xs font-medium text-muted-foreground">
         Send to a meeting now
         <span className="ml-1.5 font-normal opacity-70">(manual · calendar meetings join on their own)</span>

@@ -23,7 +23,11 @@ export function InstructionsTab({ agent }: { agent: AgentDetail }) {
   async function save() {
     setBusy(true);
     try {
-      await update({ agentId: agent._id, behaviourInstructions: behaviour, postMeetingInstructions: post });
+      await update({
+        agentId: agent._id,
+        behaviourInstructions: behaviour,
+        postMeetingInstructions: post,
+      });
       toast.success("Instructions saved");
     } catch (e) {
       toast.error(errorMessage(e));

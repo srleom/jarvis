@@ -17,7 +17,12 @@ const OpsSchema = z.object({
     .describe("At most 3 operations. Empty if nothing changed."),
 });
 
-export type BoardNote = { id: string; column: string; text: string; owner?: string };
+export type BoardNote = {
+  id: string;
+  column: string;
+  text: string;
+  owner?: string;
+};
 export type BoardOp =
   | { op: "add"; column: z.infer<typeof Column>; text: string; owner?: string }
   | { op: "update"; id: string; text?: string; owner?: string }
@@ -66,9 +71,19 @@ ${newLines}
   for (const o of result.ops.slice(0, 3)) {
     const text = o.text?.trim().replace(/\.$/, "");
     if (o.op === "add" && o.column && o.column !== "answers" && text) {
-      ops.push({ op: "add", column: o.column, text, owner: o.owner ?? undefined });
+      ops.push({
+        op: "add",
+        column: o.column,
+        text,
+        owner: o.owner ?? undefined,
+      });
     } else if (o.op === "update" && o.id && ids.has(o.id) && (text || o.owner)) {
-      ops.push({ op: "update", id: o.id, text: text || undefined, owner: o.owner ?? undefined });
+      ops.push({
+        op: "update",
+        id: o.id,
+        text: text || undefined,
+        owner: o.owner ?? undefined,
+      });
     } else if (o.op === "move" && o.id && ids.has(o.id) && o.column && o.column !== "answers") {
       ops.push({ op: "move", id: o.id, column: o.column });
       if (text) ops.push({ op: "update", id: o.id, text });

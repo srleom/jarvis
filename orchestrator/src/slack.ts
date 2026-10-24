@@ -39,7 +39,9 @@ function prefix(agent: Doc<"agents">, text: string) {
 
 function clock(seconds: number) {
   const m = Math.floor(seconds / 60);
-  return `${m}:${Math.floor(seconds % 60).toString().padStart(2, "0")}`;
+  return `${m}:${Math.floor(seconds % 60)
+    .toString()
+    .padStart(2, "0")}`;
 }
 
 function when(ms: number) {
@@ -57,7 +59,11 @@ function when(ms: number) {
 
 /** Board + recent transcript (or saved notes) for a meeting, as prompt text. */
 async function meetingContext(meetingId: Id<"meetings">, transcriptLimit = 400) {
-  const d = await convex.query(api.orchestrator.meetingDigest, { secret, meetingId, transcriptLimit });
+  const d = await convex.query(api.orchestrator.meetingDigest, {
+    secret,
+    meetingId,
+    transcriptLimit,
+  });
   if (!d) return null;
   const live = d.meeting.status === "live" || d.meeting.status === "joining";
   const board = d.board.map((n) => `- [${n.column}] ${n.text}${n.owner ? ` (owner: ${n.owner})` : ""}`).join("\n");
@@ -76,7 +82,10 @@ ${transcript || "(nothing said yet)"}
   };
 }
 
-async function pickAgent(userId: string, text: string): Promise<{ candidate: Candidate; text: string } | { reply: string }> {
+async function pickAgent(
+  userId: string,
+  text: string,
+): Promise<{ candidate: Candidate; text: string } | { reply: string }> {
   const pending = pendingChoice.get(userId);
   if (pending && Date.now() - pending.at < 10 * 60_000) {
     const t = text.trim().toLowerCase();
@@ -137,7 +146,10 @@ async function handleDM(userId: string, rawText: string): Promise<string> {
 
   if (kind === "relay") {
     if (!candidate.liveMeetingId) {
-      return prefix(agent, "There's no meeting running right now, so I can't pass that on. Try again once the team is in a call.");
+      return prefix(
+        agent,
+        "There's no meeting running right now, so I can't pass that on. Try again once the team is in a call.",
+      );
     }
     const message = intent?.relay_message?.trim() || text;
     const session = await loadSession(candidate.liveMeetingId);
@@ -158,7 +170,13 @@ async function handleDM(userId: string, rawText: string): Promise<string> {
       message,
       preview,
     });
-    session.enqueueRelay({ relayId, fromSlackUserId: userId, fromName: memberName, message, preview });
+    session.enqueueRelay({
+      relayId,
+      fromSlackUserId: userId,
+      fromName: memberName,
+      message,
+      preview,
+    });
     return prefix(agent, "Got it, I'll raise it with the team.");
   }
 
@@ -175,7 +193,9 @@ Write a short catch-up for ${memberName.split(" ")[0]} with three parts: what's 
       maxTokens: 1000,
       effort: "low",
     });
-    const intro = ctx.live ? "Here's what you've missed so far:" : `The last meeting${ctx.title ? ` (${ctx.title})` : ""} has ended. Here's the recap:`;
+    const intro = ctx.live
+      ? "Here's what you've missed so far:"
+      : `The last meeting${ctx.title ? ` (${ctx.title})` : ""} has ended. Here's the recap:`;
     return prefix(agent, `${intro}\n\n${summary ?? "Sorry, I couldn't put a summary together just now."}`);
   }
 
@@ -183,7 +203,11 @@ Write a short catch-up for ${memberName.split(" ")[0]} with three parts: what's 
     const [ctx, hits, recent] = await Promise.all([
       meetingId ? meetingContext(meetingId, 300) : Promise.resolve(null),
       memory.search(agent.mossIndexName, text, 8).catch(() => []),
-      convex.query(api.orchestrator.recentMeetings, { secret, agentId: agent._id, limit: 10 }),
+      convex.query(api.orchestrator.recentMeetings, {
+        secret,
+        agentId: agent._id,
+        limit: 10,
+      }),
     ]);
     const dates = new Map(recent.map((m) => [m.meetingId as string, when(m.startedAt)]));
     const mem = hits
@@ -193,7 +217,10 @@ Write a short catch-up for ${memberName.split(" ")[0]} with three parts: what's 
       })
       .join("\n\n");
     const past = recent
-      .map((m) => `- ${when(m.startedAt)}: ${m.title ?? "untitled"} (${m.status})${m.notesExcerpt ? `\n  ${m.notesExcerpt.replace(/\n+/g, " ")}` : ""}`)
+      .map(
+        (m) =>
+          `- ${when(m.startedAt)}: ${m.title ?? "untitled"} (${m.status})${m.notesExcerpt ? `\n  ${m.notesExcerpt.replace(/\n+/g, " ")}` : ""}`,
+      )
       .join("\n");
     const answer = await complete({
       model: STRONG_MODEL,

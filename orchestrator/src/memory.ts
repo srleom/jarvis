@@ -5,7 +5,11 @@ import { logger } from "./log.js";
 
 const log = logger("moss");
 
-export type MemoryDoc = { id: string; text: string; metadata: Record<string, string> };
+export type MemoryDoc = {
+  id: string;
+  text: string;
+  metadata: Record<string, string>;
+};
 export type MemoryHit = {
   id: string;
   text: string;
@@ -77,7 +81,14 @@ export async function search(indexName: string, query: string, topK = 5): Promis
         : source === "notes"
           ? `Notes: ${m.title ?? "meeting"}${m.date ? ` (${m.date})` : ""}`
           : `Transcript${m.speakers ? `: ${m.speakers}` : ""}${m.time ? ` · ${m.time}` : ""}`;
-    return { id: d.id, text: d.text, score: d.score, source, label, meetingId: m.meetingId };
+    return {
+      id: d.id,
+      text: d.text,
+      score: d.score,
+      source,
+      label,
+      meetingId: m.meetingId,
+    };
   });
 }
 
@@ -112,14 +123,18 @@ export async function indexDocument(opts: {
   } else {
     text = buffer.toString("utf8");
   }
-  text = text.replace(/\u0000/g, "").trim();
+  text = text.replaceAll("\0", "").trim();
   if (!text) throw new Error("No text found in this file. Scanned PDFs aren't supported.");
 
   const chunks = chunkWords(text, 500);
   const docs = chunks.map((chunk, i) => ({
     id: `doc:${opts.documentId}:${i}`,
     text: chunk,
-    metadata: { source: "doc", fileName: opts.fileName, documentId: opts.documentId },
+    metadata: {
+      source: "doc",
+      fileName: opts.fileName,
+      documentId: opts.documentId,
+    },
   }));
   await addDocs(opts.indexName, docs);
   return docs.map((d) => d.id);
