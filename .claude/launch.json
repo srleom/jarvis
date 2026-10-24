@@ -1,0 +1,24 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "convex",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--dir", "web", "exec", "convex", "dev"],
+      "env": { "CONVEX_AGENT_MODE": "anonymous" },
+      "port": 3210
+    },
+    {
+      "name": "web",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--dir", "web", "dev"],
+      "port": 3000
+    },
+    {
+      "name": "orchestrator",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--dir", "orchestrator", "dev"],
+      "port": 8787
+    }
+  ]
+}

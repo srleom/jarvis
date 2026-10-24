@@ -1,0 +1,81 @@
+"use client";
+
+import { useQuery } from "convex/react";
+import { CalendarDays, ChevronRight } from "lucide-react";
+import Link from "next/link";
+import { EmptyState } from "@/components/agent/section";
+import { StatusBadge } from "@/components/status-badge";
+import { Skeleton } from "@/components/ui/skeleton";
+import { api } from "@/convex/_generated/api";
+import type { Id } from "@/convex/_generated/dataModel";
+import { formatDate, formatDuration, formatTime } from "@/lib/format";
+import { useNow } from "@/lib/use-now";
+
+export function MeetingsTab({ agentId }: { agentId: Id<"agents"> }) {
+  const meetings = useQuery(api.meetings.listByAgent, { agentId });
+  const now = useNow(30_000);
+
+  if (meetings === undefined) {
+    return (
+      <div className="space-y-2">
+        {[0, 1, 2].map((i) => (
+          <Skeleton key={i} className="h-[68px] rounded-xl" />
+        ))}
+      </div>
+    );
+  }
+
+  if (meetings.length === 0) {
+    return (
+      <EmptyState icon={<CalendarDays />} title="No meetings yet">
+        Paste a Google Meet link above to send this agent into a call. Notes, the whiteboard and the
+        transcript will show up here.
+      </EmptyState>
+    );
+  }
+
+  return (
+    <ul className="divide-y overflow-hidden rounded-xl border bg-card">
+      {meetings.map((m) => {
+        const inProgress = m.status === "live" || m.status === "joining";
+        const end = m.endedAt ?? (inProgress ? now : m.startedAt);
+        return (
+          <li key={m._id}>
+            <Link
+              href={`/agents/${agentId}/meetings/${m._id}`}
+              className="group flex items-center gap-4 px-4 py-3.5 transition-colors hover:bg-muted/50 sm:px-5"
+            >
+              <div className="hidden w-14 shrink-0 flex-col items-center rounded-lg bg-muted/70 py-1.5 sm:flex">
+                <span className="text-[10px] font-medium tracking-wider text-muted-foreground uppercase">
+                  {new Date(m.startedAt).toLocaleDateString("en-US", { month: "short" })}
+                </span>
+                <span className="text-lg leading-none font-semibold tabular-nums">
+                  {new Date(m.startedAt).getDate()}
+                </span>
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium">
+                  {m.title ??
+                    (inProgress
+                      ? "Meeting in progress"
+                      : m.status === "failed"
+                        ? "Couldn't join"
+                        : "Writing notes…")}
+                </p>
+                <p className="mt-0.5 truncate text-sm text-muted-foreground">
+                  {formatDate(m.startedAt)} · {formatTime(m.startedAt)}
+                  {m.status !== "failed" && <> · {formatDuration(end - m.startedAt)}</>}
+                  {m.status === "failed" && m.error && <> · {m.error}</>}
+                </p>
+              </div>
+              {m.status === "live" && <StatusBadge status="live" label="Live" />}
+              {m.status === "joining" && <StatusBadge status="joining" />}
+              {m.status === "failed" && <StatusBadge status="failed" />}
+              <ChevronRight className="size-4 shrink-0 text-muted-foreground/50 transition-transform group-hover:translate-x-0.5" />
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
