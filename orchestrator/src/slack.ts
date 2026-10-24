@@ -42,6 +42,19 @@ function clock(seconds: number) {
   return `${m}:${Math.floor(seconds % 60).toString().padStart(2, "0")}`;
 }
 
+function when(ms: number) {
+  return new Date(ms).toLocaleString("en-US", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: "UTC",
+    timeZoneName: "short",
+  });
+}
+
 /** Board + recent transcript (or saved notes) for a meeting, as prompt text. */
 async function meetingContext(meetingId: Id<"meetings">, transcriptLimit = 400) {
   const d = await convex.query(api.orchestrator.meetingDigest, { secret, meetingId, transcriptLimit });
@@ -53,7 +66,7 @@ async function meetingContext(meetingId: Id<"meetings">, transcriptLimit = 400) 
     live,
     title: d.meeting.title,
     startedAt: d.meeting.startedAt,
-    text: `${live ? "This meeting is happening right now." : `This meeting ended. Title: ${d.meeting.title ?? "untitled"}.`}
+    text: `${live ? `This meeting is happening right now (started ${when(d.meeting.startedAt)}).` : `This meeting ended. Title: ${d.meeting.title ?? "untitled"}. It started ${when(d.meeting.startedAt)}.`}
 <whiteboard>
 ${board || "(empty)"}
 </whiteboard>
@@ -167,15 +180,33 @@ Write a short catch-up for ${memberName.split(" ")[0]} with three parts: what's 
   }
 
   if (kind === "question") {
-    const [ctx, hits] = await Promise.all([
+    const [ctx, hits, recent] = await Promise.all([
       meetingId ? meetingContext(meetingId, 300) : Promise.resolve(null),
-      memory.search(agent.mossIndexName, text, 5).catch(() => []),
+      memory.search(agent.mossIndexName, text, 8).catch(() => []),
+      convex.query(api.orchestrator.recentMeetings, { secret, agentId: agent._id, limit: 10 }),
     ]);
-    const mem = hits.map((h, i) => `[${i + 1}] (${h.label}) ${h.text}`).join("\n\n");
+    const dates = new Map(recent.map((m) => [m.meetingId as string, when(m.startedAt)]));
+    const mem = hits
+      .map((h, i) => {
+        const date = h.meetingId ? dates.get(h.meetingId) : undefined;
+        return `[${i + 1}] (${h.label}${date ? `, meeting on ${date}` : ""}) ${h.text}`;
+      })
+      .join("\n\n");
+    const past = recent
+      .map((m) => `- ${when(m.startedAt)}: ${m.title ?? "untitled"} (${m.status})${m.notesExcerpt ? `\n  ${m.notesExcerpt.replace(/\n+/g, " ")}` : ""}`)
+      .join("\n");
     const answer = await complete({
       model: STRONG_MODEL,
-      system: `You are ${agent.name}, an AI teammate answering a teammate's question on Slack. Answer only from the meeting context and memory below. If the answer isn't there, say so. Keep it to two or three sentences. ${agent.behaviourInstructions}`,
-      prompt: `${ctx?.text ?? "(no meetings yet)"}
+      system: `You are ${agent.name}, an AI teammate answering a teammate's question on Slack. Answer only from the meeting context, past meetings list and memory below. The question can be about any past meeting, not just the latest one. When it matters, say which meeting and when it happened. If the answer isn't there, say so. Keep it to two or three sentences. ${agent.behaviourInstructions}`,
+      prompt: `Current time: ${when(Date.now())}
+
+<latest_or_live_meeting>
+${ctx?.text ?? "(no meetings yet)"}
+</latest_or_live_meeting>
+
+<past_meetings>
+${past || "(none)"}
+</past_meetings>
 
 <memory>
 ${mem || "(nothing relevant)"}

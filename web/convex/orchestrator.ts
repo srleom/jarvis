@@ -367,6 +367,34 @@ export const agentsForSlackUser = query({
   },
 });
 
+/** An agent's most recent meetings (newest first) with a short excerpt of each one's notes. */
+export const recentMeetings = query({
+  args: { secret, agentId: v.id("agents"), limit: v.number() },
+  handler: async (ctx, args) => {
+    assertSecret(args.secret);
+    const meetings = await ctx.db
+      .query("meetings")
+      .withIndex("by_agent", (q) => q.eq("agentId", args.agentId))
+      .order("desc")
+      .take(Math.min(args.limit, 20));
+    return await Promise.all(
+      meetings.map(async (m) => {
+        const notes = await ctx.db
+          .query("meetingNotes")
+          .withIndex("by_meeting", (q) => q.eq("meetingId", m._id))
+          .first();
+        return {
+          meetingId: m._id,
+          title: m.title ?? null,
+          status: m.status,
+          startedAt: m.startedAt,
+          notesExcerpt: notes ? notes.markdown.slice(0, 600) : null,
+        };
+      }),
+    );
+  },
+});
+
 /** Everything needed to summarise a meeting for Slack: board, transcript tail, notes. */
 export const meetingDigest = query({
   args: { secret, meetingId: v.id("meetings"), transcriptLimit: v.number() },
