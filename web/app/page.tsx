@@ -70,7 +70,9 @@ export default function AgentsPage() {
                       <ArrowUpRight className="size-4 text-muted-foreground/50 transition-all group-hover:-translate-y-0.5 group-hover:translate-x-0.5 group-hover:text-foreground" />
                     </div>
                     <h3 className="mt-5 text-xl font-semibold tracking-tight">{agent.name}</h3>
-                    <p className="text-sm text-muted-foreground">Answers to &ldquo;Hey {agent.name}&rdquo;</p>
+                    <p className="line-clamp-2 text-sm text-muted-foreground">
+                      {agent.description || <>Answers to &ldquo;Hey {agent.name}&rdquo;</>}
+                    </p>
                     <div className="mt-6 flex items-center justify-between border-t pt-4">
                       <div className="flex items-center gap-4 text-sm text-muted-foreground">
                         <span className="inline-flex items-center gap-1.5">

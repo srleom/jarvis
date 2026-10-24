@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import { errorMessage } from "@/lib/format";
 
@@ -25,6 +26,7 @@ export function NewAgentDialog({ trigger }: { trigger?: ReactNode }) {
   const create = useMutation(api.agents.create);
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("Jarvis");
+  const [description, setDescription] = useState("");
   const [channel, setChannel] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -32,7 +34,7 @@ export function NewAgentDialog({ trigger }: { trigger?: ReactNode }) {
     e.preventDefault();
     setBusy(true);
     try {
-      const id = await create({ name, slackChannelId: channel });
+      const id = await create({ name, description, slackChannelId: channel });
       setOpen(false);
       router.push(`/agents/${id}?tab=team`);
     } catch (err) {
@@ -50,6 +52,7 @@ export function NewAgentDialog({ trigger }: { trigger?: ReactNode }) {
         setOpen(o);
         if (o) {
           setName("Jarvis");
+          setDescription("");
           setChannel("");
           setBusy(false);
         }
@@ -83,6 +86,17 @@ export function NewAgentDialog({ trigger }: { trigger?: ReactNode }) {
             <p className="text-xs text-muted-foreground">
               This is also the wake word. People say &ldquo;Hey {wake}&rdquo; to ask it something.
             </p>
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="agent-description">Description</Label>
+            <Textarea
+              id="agent-description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Which project this agent is assigned to"
+              maxLength={280}
+              rows={2}
+            />
           </div>
           <div className="grid gap-2">
             <Label htmlFor="agent-channel">Slack channel for meeting notes</Label>

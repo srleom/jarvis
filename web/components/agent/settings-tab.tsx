@@ -16,10 +16,10 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { CalendarCard } from "@/components/agent/calendar-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/convex/_generated/api";
 import { errorMessage } from "@/lib/format";
 import type { AgentDetail } from "@/lib/types";
@@ -29,17 +29,21 @@ export function SettingsTab({ agent }: { agent: AgentDetail }) {
   const update = useMutation(api.agents.update);
   const remove = useMutation(api.agents.remove);
   const [name, setName] = useState(agent.name);
+  const [description, setDescription] = useState(agent.description ?? "");
   const [channel, setChannel] = useState(agent.slackChannelId);
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  const dirty = name.trim() !== agent.name || channel.trim() !== agent.slackChannelId;
+  const dirty =
+    name.trim() !== agent.name ||
+    description.trim() !== (agent.description ?? "") ||
+    channel.trim() !== agent.slackChannelId;
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     try {
-      await update({ agentId: agent._id, name, slackChannelId: channel });
+      await update({ agentId: agent._id, name, description, slackChannelId: channel });
       toast.success("Settings saved");
     } catch (err) {
       toast.error(errorMessage(err));
@@ -73,6 +77,17 @@ export function SettingsTab({ agent }: { agent: AgentDetail }) {
             </p>
           </div>
           <div className="grid gap-2">
+            <Label htmlFor="s-description">Description</Label>
+            <Textarea
+              id="s-description"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Which project this agent is assigned to"
+              maxLength={280}
+              rows={2}
+            />
+          </div>
+          <div className="grid gap-2">
             <Label htmlFor="s-channel">Slack channel for meeting notes</Label>
             <Input
               id="s-channel"
@@ -90,8 +105,6 @@ export function SettingsTab({ agent }: { agent: AgentDetail }) {
           </Button>
         </div>
       </form>
-
-      <CalendarCard agentId={agent._id} agentName={agent.name} />
 
       <div className="rounded-xl border border-destructive/25 bg-card p-5">
         <h2 className="text-base font-semibold tracking-tight">Delete agent</h2>

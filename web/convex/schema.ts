@@ -46,6 +46,8 @@ export const toolLogEntry = v.object({
 export default defineSchema({
   agents: defineTable({
     name: v.string(),
+    /** Free text for people, e.g. which project this agent is assigned to. Not sent to the model. */
+    description: v.optional(v.string()),
     slackChannelId: v.string(),
     behaviourInstructions: v.string(),
     postMeetingInstructions: v.string(),

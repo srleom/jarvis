@@ -80,6 +80,7 @@ export function AgentView({ agentId }: { agentId: Id<"agents"> }) {
                     <h1 className="truncate font-serif text-[40px] leading-none tracking-tight">{agent.name}</h1>
                     <StatusBadge status={status} />
                   </div>
+                  {agent.description && <p className="mt-2 max-w-2xl text-sm">{agent.description}</p>}
                   <p className="mt-2 text-sm text-muted-foreground">
                     Say &ldquo;Hey {agent.name}&rdquo; in a call to ask it something.
                   </p>

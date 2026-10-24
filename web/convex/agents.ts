@@ -52,12 +52,19 @@ function cleanName(name: string) {
   return trimmed;
 }
 
+function cleanDescription(description: string) {
+  const trimmed = description.trim();
+  if (trimmed.length > 280) throw new ConvexError("Keep the description under 280 characters.");
+  return trimmed;
+}
+
 export const create = mutation({
-  args: { name: v.string(), slackChannelId: v.string() },
+  args: { name: v.string(), description: v.optional(v.string()), slackChannelId: v.string() },
   handler: async (ctx, args) => {
     const name = cleanName(args.name);
     const agentId = await ctx.db.insert("agents", {
       name,
+      description: args.description === undefined ? undefined : cleanDescription(args.description),
       slackChannelId: args.slackChannelId.trim(),
       behaviourInstructions: DEFAULT_BEHAVIOUR_INSTRUCTIONS,
       postMeetingInstructions: DEFAULT_POST_MEETING_INSTRUCTIONS,
@@ -77,6 +84,7 @@ export const update = mutation({
   args: {
     agentId: v.id("agents"),
     name: v.optional(v.string()),
+    description: v.optional(v.string()),
     slackChannelId: v.optional(v.string()),
     behaviourInstructions: v.optional(v.string()),
     postMeetingInstructions: v.optional(v.string()),
@@ -86,6 +94,7 @@ export const update = mutation({
     if (!agent) throw new ConvexError("Agent not found.");
     const patch: Partial<Doc<"agents">> = {};
     if (fields.name !== undefined) patch.name = cleanName(fields.name);
+    if (fields.description !== undefined) patch.description = cleanDescription(fields.description);
     if (fields.slackChannelId !== undefined) patch.slackChannelId = fields.slackChannelId.trim();
     if (fields.behaviourInstructions !== undefined) patch.behaviourInstructions = fields.behaviourInstructions.trim();
     if (fields.postMeetingInstructions !== undefined)
