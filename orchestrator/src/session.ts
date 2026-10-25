@@ -16,6 +16,9 @@ const BOARD_MIN_GAP_MS = 5_000;
 const BOARD_MAX_WAIT_MS = 15_000;
 const MOSS_INTERVAL_MS = 30_000;
 const QUESTION_WAIT_MS = 5_000;
+// Recall only finalizes an utterance a while after the speaker goes quiet. Once someone has said the
+// wake word, a question whose partial transcript hasn't changed for this long counts as finished.
+const TURN_END_MS = 800;
 const RELAY_ANSWER_MAX_MS = 60_000;
 const RELAY_SILENCE_MS = 8_000;
 const DM_CONFIRM_MS = 45_000;
@@ -88,6 +91,7 @@ export class MeetingSession {
     participantId: number;
     timer: NodeJS.Timeout;
   } | null = null;
+  private turnEnd: NodeJS.Timeout | null = null;
 
   private relayQueue: RelayItem[] = [];
   private relay: RelayItem | null = null;
@@ -154,6 +158,7 @@ export class MeetingSession {
     this.timers.forEach(clearInterval);
     if (this.boardPause) clearTimeout(this.boardPause);
     if (this.awaitingQuestion) clearTimeout(this.awaitingQuestion.timer);
+    if (this.turnEnd) clearTimeout(this.turnEnd);
     if (this.pendingDm) clearTimeout(this.pendingDm.timer);
     audio.stop(this.meetingId);
     for (const r of [this.relay, ...this.relayQueue]) {
@@ -258,20 +263,50 @@ export class MeetingSession {
   }
 
   onPartial(participantId: number, speaker: string, text: string) {
-    if (this.ended || speaker === this.name) return;
-    if (this.speaking || this.answering || this.wakeFrom !== null) return;
+    if (this.ended || speaker === this.name || this.speaking || this.answering) return;
+    if (this.awaitingQuestion?.participantId === participantId || this.wakeFrom === participantId) {
+      return this.armTurnEnd(participantId, speaker, text);
+    }
+    if (this.wakeFrom !== null) return;
     if (this.relayPhase === "speaking" || this.relayPhase === "awaiting_answer") return;
     if (this.matchWake(text) !== null) {
       this.wakeFrom = participantId;
       this.log.info(`wake word from ${speaker}`);
       void this.setAvatar("thinking");
+      this.armTurnEnd(participantId, speaker, text);
     }
+  }
+
+  /** Answers from the latest partial once it stops changing, instead of waiting for Recall's final. */
+  private armTurnEnd(participantId: number, speaker: string, text: string) {
+    if (this.turnEnd) clearTimeout(this.turnEnd);
+    this.turnEnd = setTimeout(() => {
+      this.turnEnd = null;
+      if (this.ended || this.speaking || this.answering) return;
+      const awaiting = this.awaitingQuestion?.participantId === participantId;
+      const question = awaiting ? text : this.wakeFrom === participantId ? this.matchWake(text) : null;
+      // Bare "Hey Jarvis" and the relay commands are left to the final, which handles them.
+      if (!question || question.split(" ").filter(Boolean).length < 2) return;
+      if (this.matchCommand(text, "go ahead") || this.matchCommand(text, "not now")) return;
+      if (awaiting) {
+        clearTimeout(this.awaitingQuestion!.timer);
+        this.awaitingQuestion = null;
+      }
+      this.wakeFrom = null;
+      // The final for this utterance lands while we're answering, so it won't trigger a second ask.
+      void this.ask(speaker, question);
+    }, TURN_END_MS);
   }
 
   onFinal(participantId: number, speaker: string, text: string, startTime: number) {
     if (this.ended) return;
     this.lastRelative = Math.max(this.lastRelative, startTime);
     if (speaker === this.name) return; // our own voice, already recorded when we spoke
+    if (this.turnEnd && (this.wakeFrom === participantId || this.awaitingQuestion?.participantId === participantId)) {
+      // The final beat the partial timer; it carries the full utterance, so handle it below.
+      clearTimeout(this.turnEnd);
+      this.turnEnd = null;
+    }
     const seg: Segment = { speaker, text, t: startTime, at: Date.now() };
     this.finals.push(seg);
     void convex
