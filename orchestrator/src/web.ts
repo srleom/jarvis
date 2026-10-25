@@ -1,13 +1,15 @@
 import { config } from "./config.js";
 import { logger } from "./log.js";
 
-const log = logger("apify");
+const log = logger("contextdev");
 
-/** Apify's RAG Web Browser actor in Standby mode: Google search plus page scraping in one call. */
-const RAG_BROWSER_URL = "https://rag-web-browser.apify.actor/search";
+const API_URL = "https://api.context.dev/v1/web";
 
-/** Page text kept per search result, so Claude can usually answer without read_page. */
+/** Highlight text kept per search result, so Claude can usually answer without read_page. */
 const RESULT_CONTENT_CHARS = 1500;
+
+/** Pages read with read_page may come from context.dev's cache if they're under a day old. */
+const PAGE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 
 export type SearchResult = { title: string; url: string; snippet: string; content: string };
 
@@ -19,59 +21,58 @@ export type WebCallLog = {
   ms: number;
 };
 
-type RagItem = {
-  crawl?: { httpStatusCode?: number; requestStatus?: string };
-  searchResult?: { title?: string; url?: string; description?: string };
-  metadata?: { title?: string; url?: string; description?: string };
-  markdown?: string;
+type SearchResponse = {
+  results?: {
+    url?: string;
+    title?: string;
+    description?: string;
+    highlights?: { highlights?: string[] | null };
+  }[];
 };
 
-/** Drops images and link targets, which would otherwise use up most of the character budget. */
-function tidy(markdown: string | undefined, max: number) {
-  return (markdown ?? "")
-    .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/[ \t]+\n/g, "\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim()
-    .slice(0, max);
-}
+type ScrapeResponse = { markdown?: { success?: boolean | null; data?: string | null } };
 
 /**
- * Calls the RAG Web Browser. `query` is search keywords or a single URL.
- * The actor gets a slightly shorter budget than our abort, so on a slow page it returns what it has.
+ * POSTs to context.dev. The API gets a slightly shorter deadline than our abort and returns what it has
+ * at that point, so a slow page gives partial results instead of a timeout.
  */
-async function ragBrowser(query: string, params: Record<string, string>, timeoutMs: number) {
-  if (!config.apify.token) throw new Error("Apify isn't configured (APIFY_TOKEN).");
-  const search = new URLSearchParams({
-    query,
-    outputFormats: "markdown",
-    requestTimeoutSecs: String(Math.max(1, Math.floor(timeoutMs / 1000) - 1)),
-    ...params,
-  });
-  const res = await fetch(`${RAG_BROWSER_URL}?${search}`, {
-    headers: { Authorization: `Bearer ${config.apify.token}` },
+async function contextDev<T>(path: string, body: Record<string, unknown>, timeoutMs: number) {
+  if (!config.contextDev.apiKey) throw new Error("context.dev isn't configured (CONTEXT_DEV_API_KEY).");
+  const res = await fetch(`${API_URL}/${path}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${config.contextDev.apiKey}`,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      ...body,
+      timeoutOpts: { milliseconds: Math.max(1000, timeoutMs - 1000), behavior: "return-partial" },
+    }),
     signal: AbortSignal.timeout(timeoutMs),
   });
-  const body = await res.text();
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${body.slice(0, 120)}`);
-  return JSON.parse(body) as RagItem[];
+  const text = await res.text();
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${text.slice(0, 120)}`);
+  return JSON.parse(text) as T;
 }
 
-/** Google results with the text of each result page, through the RAG Web Browser. */
+/** Web results with the passages of each page that match the query, through context.dev search. */
 export async function webSearch(
   query: string,
   timeoutMs: number,
 ): Promise<{ results: SearchResult[]; log: WebCallLog }> {
   const started = Date.now();
   try {
-    const items = await ragBrowser(query, { maxResults: "3", scrapingTool: "raw-http" }, timeoutMs);
-    const results = items
+    const data = await contextDev<SearchResponse>(
+      "search",
+      { query, numResults: 3, highlightsOptions: { enabled: true, maxCharacters: RESULT_CONTENT_CHARS } },
+      timeoutMs,
+    );
+    const results = (data.results ?? [])
       .map((r) => ({
-        title: r.searchResult?.title ?? r.metadata?.title ?? "",
-        url: r.searchResult?.url ?? r.metadata?.url ?? "",
-        snippet: r.searchResult?.description ?? r.metadata?.description ?? "",
-        content: tidy(r.markdown, RESULT_CONTENT_CHARS),
+        title: r.title ?? "",
+        url: r.url ?? "",
+        snippet: r.description ?? "",
+        content: (r.highlights?.highlights ?? []).join("\n\n").slice(0, RESULT_CONTENT_CHARS),
       }))
       .filter((r) => r.url);
     const ms = Date.now() - started;
@@ -89,12 +90,26 @@ export async function webSearch(
   }
 }
 
-/** Reads one page as markdown through the RAG Web Browser and returns the first 4,000 characters. */
+/** Reads one page's main content as markdown through context.dev scrape and returns the first 4,000 characters. */
 export async function readPage(url: string, timeoutMs: number): Promise<{ text: string | null; log: WebCallLog }> {
   const started = Date.now();
   try {
-    const items = await ragBrowser(url, {}, timeoutMs);
-    const text = tidy(items[0]?.markdown, 4000);
+    const data = await contextDev<ScrapeResponse>(
+      "scrape",
+      {
+        url,
+        formats: { markdown: true },
+        markdownParams: { includeLinks: false, includeImages: false },
+        sharedParams: { mainContentOnly: true },
+        maxAgeMs: PAGE_MAX_AGE_MS,
+      },
+      timeoutMs,
+    );
+    const text = (data.markdown?.data ?? "")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim()
+      .slice(0, 4000);
     const ms = Date.now() - started;
     const status = text ? "ok" : "empty";
     log.info(`read_page ${url} → ${status} in ${ms}ms`);

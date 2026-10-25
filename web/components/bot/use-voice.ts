@@ -30,7 +30,6 @@ export function useVoice(meetingId: string) {
     let current: AudioBufferSourceNode | null = null;
     let queue: Promise<void> = Promise.resolve();
     let retry: ReturnType<typeof setTimeout> | undefined;
-    let raf = 0;
 
     const tryResume = () => {
       if (ctx.state === "suspended") void ctx.resume();
@@ -40,15 +39,21 @@ export function useVoice(meetingId: string) {
     const resumeTimer = setInterval(tryResume, 1000);
     window.addEventListener("pointerdown", tryResume);
 
-    const tick = () => {
+    // The bot's screenshare is captured at 15fps, so faster updates only cost CPU the audio needs.
+    // Re-render only when the level moves noticeably, so silence costs nothing.
+    let smoothed = 0;
+    let shown = 0;
+    const levelTimer = setInterval(() => {
       analyser.getByteTimeDomainData(buf);
       let sum = 0;
       for (const v of buf) sum += ((v - 128) / 128) ** 2;
       const rms = Math.sqrt(sum / buf.length);
-      setLevel((prev) => prev * 0.6 + Math.min(1, rms * 4) * 0.4);
-      raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
+      smoothed = smoothed * 0.4 + Math.min(1, rms * 4) * 0.6;
+      if (Math.abs(smoothed - shown) > 0.02) {
+        shown = smoothed < 0.01 ? 0 : smoothed;
+        setLevel(shown);
+      }
+    }, 1000 / 15);
 
     const send = (msg: object) => {
       if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(msg));
@@ -118,7 +123,7 @@ export function useVoice(meetingId: string) {
       closed = true;
       clearTimeout(retry);
       clearInterval(resumeTimer);
-      cancelAnimationFrame(raf);
+      clearInterval(levelTimer);
       window.removeEventListener("pointerdown", tryResume);
       ws?.close();
       void ctx.close();

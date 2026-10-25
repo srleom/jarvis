@@ -39,8 +39,8 @@ export function buildConfig(env: Env) {
       projectId: opt("MOSS_PROJECT_ID"),
       projectKey: opt("MOSS_PROJECT_KEY"),
     },
-    apify: {
-      token: opt("APIFY_TOKEN"),
+    contextDev: {
+      apiKey: opt("CONTEXT_DEV_API_KEY"),
     },
     slack: {
       botToken: opt("SLACK_BOT_TOKEN"),
@@ -65,7 +65,7 @@ export function missingConfig(c: Config = config) {
     ["ANTHROPIC_API_KEY", !!c.anthropicKey],
     ["CARTESIA_API_KEY / CARTESIA_VOICE_ID", !!c.cartesia.apiKey && !!c.cartesia.voiceId],
     ["MOSS_PROJECT_ID / MOSS_PROJECT_KEY", !!c.moss.projectId && !!c.moss.projectKey],
-    ["APIFY_TOKEN", !!c.apify.token],
+    ["CONTEXT_DEV_API_KEY", !!c.contextDev.apiKey],
     ["SLACK_BOT_TOKEN / SLACK_APP_TOKEN", !!c.slack.botToken && !!c.slack.appToken],
   ];
   return checks.filter(([, ok]) => !ok).map(([name]) => name);

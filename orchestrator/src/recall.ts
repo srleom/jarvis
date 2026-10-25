@@ -141,6 +141,8 @@ export function buildBotConfig(
   return {
     bot_name: opts.botName,
     metadata: { meetingId: opts.meetingId },
+    // The default `web` instance (250 millicores) can't render the bot page and stream it without choppy audio.
+    variant: { google_meet: "web_4_core" },
     output_media: {
       [c.recall.outputMode]: {
         kind: "webpage",

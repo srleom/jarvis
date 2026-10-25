@@ -31,7 +31,8 @@ const SLOTS: { key: Note["column"]; label: string; icon: LucideIcon }[] = [
 const LEGACY_SLOT = { key: "topics", label: "Discussed", icon: MessagesSquare } as const;
 
 const STAGE_MAX_PER_SLOT = 4;
-const STAGE_MAX_DONE = 3;
+/** Collapsed topic rows (done plus upcoming) the stage shows around the open topic. */
+const STAGE_MAX_ROWS = 4;
 
 /** A group of notes under one topic. `topic` is null for notes that belong to no topic. */
 type Group = { topic: Topic | null; notes: Note[] };
@@ -50,7 +51,7 @@ function buildGroups(topics: Topic[], notes: Note[]) {
 
 /**
  * The meeting board: a goal bar, then the agenda as topic cards. The topic being discussed is
- * open, finished topics collapse to their outcome, upcoming ones wait as chips.
+ * open, finished topics collapse to their outcome, upcoming ones stack collapsed below it.
  * "stage" is the 1280x720 screenshare layout; "compact" is the dashboard version.
  */
 export function Board({
@@ -79,14 +80,23 @@ export function Board({
   const empty = groups.length === 0 && loose.length === 0;
 
   if (stage) {
-    const hiddenDone = Math.max(0, done.length - STAGE_MAX_DONE);
+    // Room is tight at 720px, so cap the collapsed rows and favour the upcoming ones.
+    const nextShown = Math.min(upcoming.length, Math.max(STAGE_MAX_ROWS - done.length, STAGE_MAX_ROWS / 2));
+    const doneShown = Math.min(done.length, STAGE_MAX_ROWS - nextShown);
+    const shownDone = done.slice(done.length - doneShown);
+    const shownNext = upcoming.slice(0, nextShown);
+    const hiddenDone = done.length - doneShown;
+    const hiddenNext = upcoming.length - nextShown;
     const current = active ?? (loose.length ? { topic: null, notes: loose } : undefined);
     return (
-      <div className={cn("flex flex-col gap-3", className)}>
+      <div className={cn("flex flex-col gap-2", className)}>
         {goal && <GoalBar goal={goal} progress={total ? { done: done.length, total } : undefined} stage />}
-        {hiddenDone > 0 && <p className="px-1 text-[15px] text-muted-foreground">+{hiddenDone} earlier topics</p>}
-        {done.slice(hiddenDone).map((g) => (
-          <DoneRow key={g.topic!._id} group={g} stage />
+        {shownDone.map((g, i) => (
+          <TopicRow
+            key={g.topic!._id}
+            topic={g.topic!}
+            more={i === 0 && hiddenDone ? `+${hiddenDone} earlier` : undefined}
+          />
         ))}
         {current ? (
           <TopicCard group={current} stage current className="min-h-0 flex-1" />
@@ -95,19 +105,13 @@ export function Board({
             {empty ? "Listening. Topics appear as the team talks." : "Waiting for the next topic"}
           </div>
         )}
-        {upcoming.length > 0 && (
-          <div className="flex items-center gap-2 overflow-hidden">
-            <span className="shrink-0 text-[16px] text-muted-foreground">Up next</span>
-            {upcoming.map((g) => (
-              <span
-                key={g.topic!._id}
-                className="truncate rounded-full border bg-card px-3.5 py-1 text-[18px] text-muted-foreground"
-              >
-                {g.topic!.title}
-              </span>
-            ))}
-          </div>
-        )}
+        {shownNext.map((g, i) => (
+          <TopicRow
+            key={g.topic!._id}
+            topic={g.topic!}
+            more={i === shownNext.length - 1 && hiddenNext ? `+${hiddenNext} more` : undefined}
+          />
+        ))}
       </div>
     );
   }
@@ -217,28 +221,32 @@ function GoalBar({
   );
 }
 
-function DoneRow({ group, stage }: { group: Group; stage?: boolean }) {
-  const t = group.topic!;
+/** A collapsed topic on the stage: done ones show their outcome, upcoming ones wait their turn. */
+function TopicRow({ topic, more }: { topic: Topic; more?: string }) {
+  const done = topic.status === "done";
   return (
     <div
-      className="flex items-center gap-3 rounded-xl px-4 py-2"
-      style={{ background: "color-mix(in oklch, var(--col-decisions) 55%, transparent)" }}
-    >
-      <Check className={cn("shrink-0", stage ? "size-6" : "size-4")} style={{ color: "var(--col-decisions-ink)" }} />
-      <span
-        className={cn("shrink-0 font-semibold", stage ? "text-[21px]" : "text-sm")}
-        style={{ color: "var(--col-decisions-ink)" }}
-      >
-        {t.title}
-      </span>
-      {t.outcome && (
-        <span
-          className={cn("min-w-0 truncate", stage ? "text-[21px]" : "text-sm")}
-          style={{ color: "var(--col-decisions-ink)" }}
-        >
-          {t.outcome}
-        </span>
+      className={cn(
+        "flex h-11 shrink-0 items-center gap-3 rounded-xl px-4 text-[20px]",
+        !done && "border text-muted-foreground",
       )}
+      style={
+        done
+          ? {
+              background: "color-mix(in oklch, var(--col-decisions) 55%, transparent)",
+              color: "var(--col-decisions-ink)",
+            }
+          : undefined
+      }
+    >
+      {done ? (
+        <Check className="size-6 shrink-0" />
+      ) : (
+        <span className="mx-1.5 size-3 shrink-0 rounded-full border-[1.5px] border-muted-foreground/50" />
+      )}
+      <span className={cn("shrink-0", done ? "font-semibold" : "font-medium")}>{topic.title}</span>
+      {done && topic.outcome && <span className="min-w-0 truncate">{topic.outcome}</span>}
+      {more && <span className="ml-auto shrink-0 text-[16px] text-muted-foreground">{more}</span>}
     </div>
   );
 }

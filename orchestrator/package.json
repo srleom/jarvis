@@ -10,6 +10,7 @@
     "simulate": "tsx --env-file-if-exists=.env scripts/simulate.ts",
     "test": "tsx --test \"src/**/*.test.ts\"",
     "smoke": "tsx scripts/smoke.ts",
+    "bench:search": "tsx --env-file-if-exists=.env scripts/bench-search.ts",
     "lint": "eslint ."
   },
   "dependencies": {

@@ -9,7 +9,11 @@ import * as recall from "./recall.js";
 import { synthesize } from "./tts.js";
 import { proposeBoardOps } from "./whiteboard.js";
 
-const BOARD_INTERVAL_MS = 15_000;
+// The board updates once speech pauses, so each call sees a complete thought. A long monologue
+// still gets flushed once its oldest unprocessed line is BOARD_MAX_WAIT_MS old.
+const BOARD_PAUSE_MS = 2_500;
+const BOARD_MIN_GAP_MS = 5_000;
+const BOARD_MAX_WAIT_MS = 15_000;
 const MOSS_INTERVAL_MS = 30_000;
 const QUESTION_WAIT_MS = 5_000;
 const RELAY_ANSWER_MAX_MS = 60_000;
@@ -74,6 +78,8 @@ export class MeetingSession {
   private finals: Segment[] = [];
   private boardCursor = 0;
   private boardRunning = false;
+  private boardPause: NodeJS.Timeout | null = null;
+  private lastBoardRun = 0;
   private mossCursor = 0;
   private mossChunk = 0;
 
@@ -113,7 +119,7 @@ export class MeetingSession {
 
   private startTimers() {
     this.timers.push(
-      setInterval(() => void this.updateBoard(), BOARD_INTERVAL_MS),
+      setInterval(() => this.boardFallback(), 1000),
       setInterval(() => void this.indexTranscript(false), MOSS_INTERVAL_MS),
       setInterval(() => this.maybeRaiseHand(), 1000),
     );
@@ -146,6 +152,7 @@ export class MeetingSession {
     if (this.ended) return;
     this.ended = true;
     this.timers.forEach(clearInterval);
+    if (this.boardPause) clearTimeout(this.boardPause);
     if (this.awaitingQuestion) clearTimeout(this.awaitingQuestion.timer);
     if (this.pendingDm) clearTimeout(this.pendingDm.timer);
     audio.stop(this.meetingId);
@@ -276,6 +283,7 @@ export class MeetingSession {
         startTime,
       })
       .catch((e) => this.log.warn(`transcript write failed: ${(e as Error).message}`));
+    if (this.introduced) this.scheduleBoard(BOARD_PAUSE_MS);
 
     if (this.pendingDm?.askedBy === speaker) {
       const reply = confirmation(text);
@@ -437,9 +445,26 @@ export class MeetingSession {
 
   // ---------------------------------------------------------------- whiteboard
 
+  /** (Re)starts the pause timer. Every new final line pushes it back, so it fires once speech stops. */
+  private scheduleBoard(delay: number) {
+    if (this.boardPause) clearTimeout(this.boardPause);
+    this.boardPause = setTimeout(() => {
+      this.boardPause = null;
+      const wait = this.lastBoardRun + BOARD_MIN_GAP_MS - Date.now();
+      if (wait > 0) return this.scheduleBoard(wait);
+      void this.updateBoard();
+    }, delay);
+  }
+
+  private boardFallback() {
+    const oldest = this.finals[this.boardCursor];
+    if (oldest && Date.now() - oldest.at >= BOARD_MAX_WAIT_MS) void this.updateBoard();
+  }
+
   private async updateBoard() {
     if (this.boardRunning || this.ended || this.finals.length === this.boardCursor) return;
     this.boardRunning = true;
+    this.lastBoardRun = Date.now();
     const end = this.finals.length;
     try {
       const lines = this.finals
@@ -484,6 +509,8 @@ export class MeetingSession {
       this.log.warn(`board update failed: ${(e as Error).message}`);
     } finally {
       this.boardRunning = false;
+      // Lines that arrived mid-call may have had their pause fire while we were busy.
+      if (!this.ended && this.finals.length > end && !this.boardPause) this.scheduleBoard(BOARD_PAUSE_MS);
     }
   }
 

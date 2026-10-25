@@ -9,8 +9,8 @@ import { readPage, webSearch, type WebCallLog } from "./web.js";
 const log = logger("qa");
 
 const MAX_TOOL_CALLS = 4;
-/** Apify's RAG Web Browser searches and scrapes in one call, which takes 10-20 s. */
-const TOOL_BUDGET_MS = 25000;
+/** context.dev search with highlights takes 1-3 s; a page read can take several seconds more. */
+const TOOL_BUDGET_MS = 15000;
 
 const AnswerSchema = z.object({
   spoken_answer: z.string().describe("One to three short spoken sentences. No markdown, no URLs."),
@@ -59,7 +59,7 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: "web_search",
     description:
-      "Search the public web (Google). Returns the top 3 results with title, URL, snippet and the start of each page's text. Use for facts, prices, dates and anything outside the team's own documents.",
+      "Search the public web. Returns the top 3 results with title, URL, snippet and the passages of each page that match the query. Use for facts, prices, dates and anything outside the team's own documents.",
     input_schema: {
       type: "object",
       properties: { query: { type: "string" } },
@@ -117,7 +117,7 @@ ${behaviour || "(none)"}`;
 }
 
 /**
- * Answers a spoken question with Claude and up to 4 tool calls within a 25-second tool budget.
+ * Answers a spoken question with Claude and up to 4 tool calls within a 15-second tool budget.
  * When the budget runs out, Claude answers with what it has.
  */
 export async function answerQuestion(opts: {
