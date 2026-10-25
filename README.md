@@ -21,7 +21,7 @@ The full product spec is in [docs/APP_OVERVIEW.md](docs/APP_OVERVIEW.md).
             └──────┬───────────────────▲───────────┘
    transcript,     │                   │ create bot, chat, leave
    chat, status    ▼                   │
-         ┌─────────────────────────────┴──┐   Claude · Cartesia · Moss · Bright Data
+         ┌─────────────────────────────┴──┐   Claude · Cartesia · Moss · Apify
          │ orchestrator/ (Node, Express)  │──────────────────────────────────────▶
          │ wake word · Q&A · whiteboard   │◀── Slack (Bolt, Socket Mode) ──▶ DMs
          │ loop · relay · memory          │
@@ -115,13 +115,13 @@ Known limitations:
 
 Moss is Jarvis's memory search, queried mid-conversation. There is one Moss index per agent. It holds uploaded documents (≈500-word chunks), the live transcript (≈200-word chunks added every 30 seconds) and meeting notes. During a call, Claude calls `search_memory`, which runs a Moss query and returns the top 5 chunks with their source. The dashboard's Memory tab runs the same search. Deleting a document or meeting removes its chunks from Moss.
 
-### Bright Data
+### Apify
 
-Web answers. `web_search` calls the SERP API (Google, parsed JSON via `brd_json=1`) and returns the top 5 results; `read_page` calls Web Unlocker with `data_format: markdown` and returns the first 4,000 characters. Blocks, timeouts and empty results are handled: the tool tells Claude to try another result, and if search fails Jarvis says it couldn't confirm online. Every call is logged with query, status and time taken, and shown under each answer on the meeting page. Answers always show their source domain on the whiteboard. No mocked data.
+Web answers, through Apify's [RAG Web Browser](https://apify.com/apify/rag-web-browser) actor in Standby mode. `web_search` sends the query to its `/search` endpoint, which searches Google and scrapes the top 3 results (`raw-http`, markdown); each result comes back with its title, URL, snippet and the first 1,500 characters of the page, so Claude rarely needs a second call. `read_page` passes a single URL to the same endpoint and returns the first 4,000 characters. A search and scrape takes 10-20 seconds, so the Q&A tool budget is 25 seconds. Blocks, timeouts and empty results are handled: the tool tells Claude to try another result, and if search fails Jarvis says it couldn't confirm online. Every call is logged with query, status and time taken, and shown under each answer on the meeting page. Answers always show their source domain on the whiteboard. No mocked data.
 
 ### Anthropic (Claude)
 
-All reasoning. `claude-haiku-5-5` handles the whiteboard loop (every 15 s it returns at most three add/update/move/remove operations), DM classification and raised-hand previews. `claude-sonnet-5-5` answers spoken questions (with up to 4 tool calls in an 8-second tool budget), writes Slack catch-ups and relay replies, and writes meeting notes. Every state-changing call returns JSON validated with zod; on failure it retries once, then skips.
+All reasoning. `claude-haiku-5-5` handles the whiteboard loop (every 15 s it returns at most three add/update/move/remove operations), DM classification and raised-hand previews. `claude-sonnet-5-5` answers spoken questions (with up to 4 tool calls in a 25-second tool budget), writes Slack catch-ups and relay replies, and writes meeting notes. Every state-changing call returns JSON validated with zod; on failure it retries once, then skips.
 
 Where it could go wrong, and what we do about it:
 

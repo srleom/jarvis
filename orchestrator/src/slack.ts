@@ -22,7 +22,7 @@ type Candidate = {
 const pendingChoice = new Map<string, { candidates: Candidate[]; text: string; at: number }>();
 
 const Intent = z.object({
-  intent: z.enum(["catch_up", "question", "relay", "other"]),
+  intent: z.enum(["catch_up", "question", "relay", "unsupported", "other"]),
   relay_message: z
     .string()
     .nullable()
@@ -144,7 +144,8 @@ async function handleDM(userId: string, rawText: string): Promise<string> {
 - catch_up: they want a summary of the meeting ("what did I miss?", "catch me up").
 - question: a question about the meeting or past meetings ("did we pick a venue?").
 - relay: they want a message passed to the people in the call ("tell the team...", "let them know...").
-- other: anything else (greetings, thanks, requests Jarvis can't do).`,
+- unsupported: a request for something ${agent.name} can't do (sending emails, booking things, editing documents, anything that isn't about the team's meetings).
+- other: greetings, thanks and small talk.`,
     prompt: text,
     maxTokens: 400,
   });
@@ -233,7 +234,7 @@ Write a short catch-up for ${memberName.split(" ")[0]} with three parts: what's 
       .join("\n");
     const answer = await complete({
       model: STRONG_MODEL,
-      system: `You are ${agent.name}, an AI teammate answering a teammate's question on Slack. Answer only from the meeting context, past meetings list and memory below. The question can be about any past meeting, not just the latest one. When it matters, say which meeting and when it happened. If the answer isn't there, say so. Keep it to two or three sentences. ${agent.behaviourInstructions}`,
+      system: `You are ${agent.name}, an AI teammate answering a teammate's question on Slack. Answer only from the meeting context, past meetings list and memory below. The question can be about any past meeting, not just the latest one. When it matters, say which meeting and when it happened. If the answer isn't there, start with "I don't have that" and say plainly what's missing (for example no meeting covered it, or nothing was noted); never guess or fill gaps. Keep it to two or three sentences. ${agent.behaviourInstructions}`,
       prompt: `Current time: ${when(Date.now())}
 
 <latest_or_live_meeting>
@@ -255,10 +256,11 @@ ${memberName} asks: ${text}`,
     return prefix(agent, answer ?? "Sorry, I couldn't answer that just now.");
   }
 
-  return prefix(
-    agent,
-    `I'm ${agent.name}, your team's meeting teammate. You can DM me:\n• "What have I missed?" for a catch-up on the current call\n• A question like "Did we pick a venue?"\n• "Tell the team …" and I'll raise my hand and read it out in the call, then send you their answer`,
-  );
+  const capabilities = `You can DM me:\n• "What have I missed?" for a catch-up on the current call\n• A question like "Did we pick a venue?"\n• "Tell the team …" and I'll raise my hand and read it out in the call, then send you their answer`;
+  if (kind === "unsupported") {
+    return prefix(agent, `Sorry, I can't do that. I only help with your team's meetings. ${capabilities}`);
+  }
+  return prefix(agent, `I'm ${agent.name}, your team's meeting teammate. ${capabilities}`);
 }
 
 export async function startSlack() {

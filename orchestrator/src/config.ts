@@ -39,10 +39,8 @@ export function buildConfig(env: Env) {
       projectId: opt("MOSS_PROJECT_ID"),
       projectKey: opt("MOSS_PROJECT_KEY"),
     },
-    brightData: {
-      apiKey: opt("BRIGHT_DATA_API_KEY"),
-      serpZone: opt("BRIGHT_DATA_SERP_ZONE"),
-      unlockerZone: opt("BRIGHT_DATA_UNLOCKER_ZONE"),
+    apify: {
+      token: opt("APIFY_TOKEN"),
     },
     slack: {
       botToken: opt("SLACK_BOT_TOKEN"),
@@ -67,7 +65,7 @@ export function missingConfig(c: Config = config) {
     ["ANTHROPIC_API_KEY", !!c.anthropicKey],
     ["CARTESIA_API_KEY / CARTESIA_VOICE_ID", !!c.cartesia.apiKey && !!c.cartesia.voiceId],
     ["MOSS_PROJECT_ID / MOSS_PROJECT_KEY", !!c.moss.projectId && !!c.moss.projectKey],
-    ["BRIGHT_DATA_API_KEY / zones", !!c.brightData.apiKey && !!c.brightData.serpZone],
+    ["APIFY_TOKEN", !!c.apify.token],
     ["SLACK_BOT_TOKEN / SLACK_APP_TOKEN", !!c.slack.botToken && !!c.slack.appToken],
   ];
   return checks.filter(([, ok]) => !ok).map(([name]) => name);

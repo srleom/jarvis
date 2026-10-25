@@ -9,7 +9,8 @@ import { readPage, webSearch, type WebCallLog } from "./web.js";
 const log = logger("qa");
 
 const MAX_TOOL_CALLS = 4;
-const TOOL_BUDGET_MS = 8000;
+/** Apify's RAG Web Browser searches and scrapes in one call, which takes 10-20 s. */
+const TOOL_BUDGET_MS = 25000;
 
 const AnswerSchema = z.object({
   spoken_answer: z.string().describe("One to three short spoken sentences. No markdown, no URLs."),
@@ -58,7 +59,7 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: "web_search",
     description:
-      "Search the public web (Google). Returns the top 5 results with title, URL and snippet. Use for facts, prices, dates and anything outside the team's own documents.",
+      "Search the public web (Google). Returns the top 3 results with title, URL, snippet and the start of each page's text. Use for facts, prices, dates and anything outside the team's own documents.",
     input_schema: {
       type: "object",
       properties: { query: { type: "string" } },
@@ -70,7 +71,7 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: "read_page",
     description:
-      "Read a web page from search results when the snippets aren't enough. Returns the first 4,000 characters as text. If a page fails, try another result.",
+      "Read more of a web page when the text in the search results isn't enough. Returns the first 4,000 characters as text. Slow, so use it rarely. If a page fails, try another result.",
     input_schema: {
       type: "object",
       properties: { url: { type: "string" } },
@@ -105,7 +106,7 @@ function systemPrompt(agentName: string, behaviour: string) {
 How to answer:
 - Answer in one to three short sentences that sound natural when spoken. No lists, markdown or URLs in the spoken answer.
 - Use what was said in the call when it's relevant (for example a budget someone mentioned), and say so briefly ("you said 10k earlier").
-- Use tools only when you need them. Prefer search_memory for the team's own plans; use web_search for public facts. Read a page only if the snippets don't answer it.
+- Use tools only when you need them. Prefer search_memory for the team's own plans; use web_search for public facts. Search results already include page text, so read a page only if that doesn't answer it.
 - Memory results carry dates. Project state is the team's latest agreed facts. If memory sources disagree, trust project state first, then the newer date, and mention the change briefly ("the brief says 50k, but you cut it to 40k on March 3").
 - Never guess facts. If the web search returned nothing or failed, say you couldn't confirm it online and answer from what you have.
 - When an answer comes from the web, set source_url to the page you relied on.
@@ -116,7 +117,7 @@ ${behaviour || "(none)"}`;
 }
 
 /**
- * Answers a spoken question with Claude and up to 4 tool calls within an 8-second tool budget.
+ * Answers a spoken question with Claude and up to 4 tool calls within a 25-second tool budget.
  * When the budget runs out, Claude answers with what it has.
  */
 export async function answerQuestion(opts: {
@@ -268,6 +269,7 @@ async function runTool(
           content: hits.map((h, i) => `[${i + 1}] (${h.label})\n${h.text}`).join("\n\n"),
         };
       } catch (e) {
+        log.warn(`search_memory "${input.query ?? ""}" failed: ${(e as Error).message}`);
         toolLog.push({
           tool: "search_memory",
           input: input.query ?? "",
@@ -294,7 +296,9 @@ async function runTool(
         };
       }
       return {
-        content: results.map((r, i) => `[${i + 1}] ${r.title}\n${r.url}\n${r.snippet}`).join("\n\n"),
+        content: results
+          .map((r, i) => `[${i + 1}] ${r.title}\n${r.url}\n${r.snippet}${r.content ? `\n\n${r.content}` : ""}`)
+          .join("\n\n---\n\n"),
       };
     }
     case "read_page": {
