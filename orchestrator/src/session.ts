@@ -17,8 +17,10 @@ const BOARD_MAX_WAIT_MS = 15_000;
 const MOSS_INTERVAL_MS = 30_000;
 const QUESTION_WAIT_MS = 5_000;
 // Recall only finalizes an utterance a while after the speaker goes quiet. Once someone has said the
-// wake word, a question whose partial transcript hasn't changed for this long counts as finished.
-const TURN_END_MS = 800;
+// wake word, a question whose partial transcript ends a sentence and hasn't changed for TURN_END_MS
+// counts as finished. Without closing punctuation it's probably a mid-sentence pause, so wait longer.
+const TURN_END_MS = 700;
+const TURN_END_UNPUNCTUATED_MS = 2_000;
 const RELAY_ANSWER_MAX_MS = 60_000;
 const RELAY_SILENCE_MS = 8_000;
 const DM_CONFIRM_MS = 45_000;
@@ -280,6 +282,7 @@ export class MeetingSession {
   /** Answers from the latest partial once it stops changing, instead of waiting for Recall's final. */
   private armTurnEnd(participantId: number, speaker: string, text: string) {
     if (this.turnEnd) clearTimeout(this.turnEnd);
+    const wait = /[.?!]["')]?\s*$/.test(text) ? TURN_END_MS : TURN_END_UNPUNCTUATED_MS;
     this.turnEnd = setTimeout(() => {
       this.turnEnd = null;
       if (this.ended || this.speaking || this.answering) return;
@@ -293,9 +296,10 @@ export class MeetingSession {
         this.awaitingQuestion = null;
       }
       this.wakeFrom = null;
+      this.log.info(`turn ended after ${wait}ms pause: "${text}"`);
       // The final for this utterance lands while we're answering, so it won't trigger a second ask.
       void this.ask(speaker, question);
-    }, TURN_END_MS);
+    }, wait);
   }
 
   onFinal(participantId: number, speaker: string, text: string, startTime: number) {
